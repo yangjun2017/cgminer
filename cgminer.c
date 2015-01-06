@@ -72,6 +72,10 @@ char *curly = ":D";
 #include "driver-avalon2.h"
 #endif
 
+#ifdef USE_AVALON4
+#include "driver-avalon4.h"
+#endif
+
 #ifdef USE_BFLSC
 #include "driver-bflsc.h"
 #endif
@@ -215,7 +219,9 @@ static bool no_work;
 #ifdef USE_ICARUS
 char *opt_icarus_options = NULL;
 char *opt_icarus_timing = NULL;
-float opt_anu_freq = 200;
+float opt_anu_freq = 250;
+float opt_au3_freq = 225;
+int opt_au3_volt = 750;
 float opt_rock_freq = 270;
 #endif
 bool opt_worktime;
@@ -229,6 +235,11 @@ static char *opt_set_avalon_freq;
 static char *opt_set_avalon2_freq;
 static char *opt_set_avalon2_fan;
 static char *opt_set_avalon2_voltage;
+#endif
+#ifdef USE_AVALON4
+static char *opt_set_avalon4_fan;
+static char *opt_set_avalon4_voltage;
+static char *opt_set_avalon4_freq;
 #endif
 #ifdef USE_BLOCKERUPTER
 int opt_bet_clk = 0;
@@ -771,6 +782,16 @@ static char *set_int_32_to_63(const char *arg, int *i)
 	return set_int_range(arg, i, 32, 63);
 }
 
+static char *set_int_22_to_55(const char *arg, int *i)
+{
+	return set_int_range(arg, i, 22, 55);
+}
+
+static char *set_int_42_to_65(const char *arg, int *i)
+{
+	return set_int_range(arg, i, 42, 62);
+}
+
 static char *set_int_1_to_10(const char *arg, int *i)
 {
 	return set_int_range(arg, i, 1, 10);
@@ -1079,6 +1100,19 @@ static char *set_float_125_to_500(const char *arg, float *i)
 	return NULL;
 }
 
+static char *set_float_100_to_250(const char *arg, float *i)
+{
+	char *err = opt_set_floatval(arg, i);
+
+	if (err)
+		return err;
+
+	if (*i < 100 || *i > 250)
+		return "Value out of range";
+
+	return NULL;
+}
+
 static char *set_null(const char __maybe_unused *arg)
 {
 	return NULL;
@@ -1089,7 +1123,7 @@ static struct opt_table opt_config_table[] = {
 #ifdef USE_ICARUS
 	OPT_WITH_ARG("--anu-freq",
 		     set_float_125_to_500, &opt_show_floatval, &opt_anu_freq,
-		     "Set AntminerU1 frequency in MHz, range 125-500"),
+		     "Set AntminerU1/2 frequency in MHz, range 125-500"),
 #endif
 	OPT_WITH_ARG("--api-allow",
 		     opt_set_charp, NULL, &opt_api_allow,
@@ -1127,6 +1161,14 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_ARG("--api-host",
 		     opt_set_charp, NULL, &opt_api_host,
 		     "Specify API listen address, default: 0.0.0.0"),
+#ifdef USE_ICARUS
+	OPT_WITH_ARG("--au3-freq",
+		     set_float_100_to_250, &opt_show_floatval, &opt_au3_freq,
+		     "Set AntminerU3 frequency in MHz, range 100-250"),
+	OPT_WITH_ARG("--au3-volt",
+		     set_int_0_to_9999, &opt_show_intval, &opt_au3_volt,
+		     "Set AntminerU3 voltage in mv, range 725-850, 0 to not set"),
+#endif
 #ifdef USE_AVALON
 	OPT_WITHOUT_ARG("--avalon-auto",
 			opt_set_bool, &opt_avalon_auto,
@@ -1166,6 +1208,38 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_ARG("--avalon2-polling-delay",
 		     set_int_1_to_65535, opt_show_intval, &opt_avalon2_polling_delay,
 		     "Set Avalon2 polling delay value (ms)"),
+#endif
+#ifdef USE_AVALON4
+	OPT_WITHOUT_ARG("--avalon4-automatic-voltage",
+			opt_set_bool, &opt_avalon4_autov,
+			"Automatic adjust voltage base on module DH"),
+	OPT_WITH_CBARG("--avalon4-voltage",
+		     set_avalon4_voltage, NULL, &opt_set_avalon4_voltage,
+		     "Set Avalon4 core voltage, in millivolts, step: 125"),
+	OPT_WITH_CBARG("--avalon4-freq",
+		     set_avalon4_freq, NULL, &opt_set_avalon4_freq,
+		     "Set frequency for Avalon4, 1 to 3 values, example: 445:385:370"),
+	OPT_WITH_CBARG("--avalon4-fan",
+		     set_avalon4_fan, NULL, &opt_set_avalon4_fan,
+		     "Set Avalon4 target fan speed range"),
+	OPT_WITH_ARG("--avalon4-temp",
+		     set_int_22_to_55, opt_show_intval, &opt_avalon4_temp_target,
+		     "Set Avalon4 target temperature"),
+	OPT_WITH_ARG("--avalon4-cutoff",
+		     set_int_42_to_65, opt_show_intval, &opt_avalon4_overheat,
+		     "Set Avalon4 overheat cut off temperature"),
+	OPT_WITH_ARG("--avalon4-polling-delay",
+		     set_int_1_to_65535, opt_show_intval, &opt_avalon4_polling_delay,
+		     "Set Avalon4 polling delay value (ms)"),
+	OPT_WITH_ARG("--avalon4-ntime-offset",
+		     opt_set_intval, opt_show_intval, &opt_avalon4_ntime_offset,
+		     "Set Avalon4 MM ntime rolling max offset"),
+	OPT_WITH_ARG("--avalon4-aucspeed",
+		     opt_set_intval, opt_show_intval, &opt_avalon4_aucspeed,
+		     "Set Avalon4 AUC IIC bus speed"),
+	OPT_WITH_ARG("--avalon4-aucxdelay",
+		     opt_set_intval, opt_show_intval, &opt_avalon4_aucxdelay,
+		     "Set Avalon4 AUC IIC xfer read delay, 4800 ~= 1ms"),
 #endif
 #ifdef USE_BAB
 	OPT_WITH_ARG("--bab-options",
@@ -1761,6 +1835,9 @@ static char *opt_verusage_and_exit(const char *extra)
 #endif
 #ifdef USE_AVALON2
 		"avalon2 "
+#endif
+#ifdef USE_AVALON4
+		"avalon4 "
 #endif
 #ifdef USE_BFLSC
 		"bflsc "
@@ -2641,7 +2718,7 @@ static void get_statline(char *buf, size_t bufsiz, struct cgpu_info *cgpu)
 	suffix_string(dh64, displayed_hashes, sizeof(displayed_hashes), 4);
 	suffix_string(dr64, displayed_rolling, sizeof(displayed_rolling), 4);
 
-	snprintf(buf, bufsiz, "%s%d ", cgpu->drv->name, cgpu->device_id);
+	snprintf(buf, bufsiz, "%s %d ", cgpu->drv->name, cgpu->device_id);
 	cgpu->drv->get_statline_before(buf, bufsiz, cgpu);
 	tailsprintf(buf, bufsiz, "(%ds):%s (avg):%sh/s | A:%.0f R:%.0f HW:%d WU:%.1f/m",
 		opt_log_interval,
@@ -5063,13 +5140,16 @@ void write_config(FILE *fcfg)
 			     (void *)opt->cb_arg == (void *)set_int_0_to_255 ||
 			     (void *)opt->cb_arg == (void *)set_int_0_to_200 ||
 			     (void *)opt->cb_arg == (void *)set_int_0_to_4 ||
-			     (void *)opt->cb_arg == (void *)set_int_32_to_63)) {
+			     (void *)opt->cb_arg == (void *)set_int_32_to_63 ||
+			     (void *)opt->cb_arg == (void *)set_int_22_to_55 ||
+			     (void *)opt->cb_arg == (void *)set_int_42_to_65)) {
 				fprintf(fcfg, ",\n\"%s\" : \"%d\"", p+2, *(int *)opt->u.arg);
 				continue;
 			}
 
 			if (opt->type & OPT_HASARG &&
-			    ((void *)opt->cb_arg == (void *)set_float_125_to_500)) {
+			    (((void *)opt->cb_arg == (void *)set_float_125_to_500) ||
+			     (void *)opt->cb_arg == (void *)set_float_100_to_250)) {
 				fprintf(fcfg, ",\n\"%s\" : \"%.1f\"", p+2, *(float *)opt->u.arg);
 				continue;
 			}
@@ -6015,8 +6095,6 @@ static bool parse_stratum_response(struct pool *pool, char *s)
 	}
 
 	res_val = json_object_get(val, "result");
-	if (!res_val)
-		goto out;
 	err_val = json_object_get(val, "error");
 	id_val = json_object_get(val, "id");
 
@@ -6048,6 +6126,8 @@ static bool parse_stratum_response(struct pool *pool, char *s)
 	if (!sshare) {
 		double pool_diff;
 
+		if (!res_val)
+			goto out;
 		/* Since the share is untracked, we can only guess at what the
 		 * work difficulty is based on the current pool diff. */
 		cg_rlock(&pool->data_lock);
@@ -6323,6 +6403,8 @@ out:
 static void *stratum_sthread(void *userdata)
 {
 	struct pool *pool = (struct pool *)userdata;
+	uint64_t last_nonce2 = 0;
+	uint32_t last_nonce = 0;
 	char threadname[16];
 
 	pthread_detach(pthread_self());
@@ -6358,6 +6440,21 @@ static void *stratum_sthread(void *userdata)
 			continue;
 		}
 
+		nonce = *((uint32_t *)(work->data + 76));
+		nonce2_64 = (uint64_t *)nonce2;
+		*nonce2_64 = htole64(work->nonce2);
+		/* Filter out duplicate shares */
+		if (unlikely(nonce == last_nonce && *nonce2_64 == last_nonce2)) {
+			applog(LOG_INFO, "Filtering duplicate share to pool %d",
+			       pool->pool_no);
+			free_work(work);
+			continue;
+		}
+		last_nonce = nonce;
+		last_nonce2 = *nonce2_64;
+		__bin2hex(noncehex, (const unsigned char *)&nonce, 4);
+		__bin2hex(nonce2hex, nonce2, work->nonce2_len);
+
 		sshare = calloc(sizeof(struct stratum_share), 1);
 		hash32 = (uint32_t *)work->hash;
 		submitted = false;
@@ -6365,18 +6462,12 @@ static void *stratum_sthread(void *userdata)
 		sshare->sshare_time = time(NULL);
 		/* This work item is freed in parse_stratum_response */
 		sshare->work = work;
-		nonce = *((uint32_t *)(work->data + 76));
-		__bin2hex(noncehex, (const unsigned char *)&nonce, 4);
 		memset(s, 0, 1024);
 
 		mutex_lock(&sshare_lock);
 		/* Give the stratum share a unique id */
 		sshare->id = swork_id++;
 		mutex_unlock(&sshare_lock);
-
-		nonce2_64 = (uint64_t *)nonce2;
-		*nonce2_64 = htole64(work->nonce2);
-		__bin2hex(nonce2hex, nonce2, work->nonce2_len);
 
 		snprintf(s, sizeof(s),
 			"{\"params\": [\"%s\", \"%s\", \"%s\", \"%s\", \"%s\"], \"id\": %d, \"method\": \"mining.submit\"}",
@@ -6887,9 +6978,9 @@ void set_target(unsigned char *dest_target, double diff)
 	memcpy(dest_target, target, 32);
 }
 
-#if defined (USE_AVALON2) || defined (USE_HASHRATIO)
+#if defined (USE_AVALON2) || defined (USE_AVALON4) || defined (USE_HASHRATIO)
 bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *real_pool,
-			 uint32_t nonce2, uint32_t nonce)
+			 uint32_t nonce2, uint32_t nonce,  uint32_t ntime)
 {
 	const int thr_id = thr->id;
 	struct cgpu_info *cgpu = thr->cgpu;
@@ -6902,6 +6993,10 @@ bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *r
 	cg_wunlock(&pool->data_lock);
 
 	gen_stratum_work(pool, work);
+	while (ntime--) {
+		roll_work(work);
+	}
+
 	work->pool = real_pool;
 
 	work->thr_id = thr_id;
@@ -7257,7 +7352,7 @@ static void submit_work_async(struct work *work)
 
 void inc_hw_errors(struct thr_info *thr)
 {
-	applog(LOG_INFO, "%s%d: invalid nonce - HW error", thr->cgpu->drv->name,
+	applog(LOG_INFO, "%s %d: invalid nonce - HW error", thr->cgpu->drv->name,
 	       thr->cgpu->device_id);
 
 	mutex_lock(&stats_lock);
@@ -7338,10 +7433,26 @@ bool submit_tested_work(struct thr_info *thr, struct work *work)
 	return true;
 }
 
-/* Returns true if nonce for work was a valid share */
+/* Rudimentary test to see if cgpu has returned the same nonce twice in a row which is
+ * always going to be a duplicate which should be reported as a hw error. */
+static bool new_nonce(struct thr_info *thr, uint32_t nonce)
+{
+	struct cgpu_info *cgpu = thr->cgpu;
+
+	if (unlikely(cgpu->last_nonce == nonce)) {
+		applog(LOG_INFO, "%s %d duplicate share detected as HW error",
+		       cgpu->drv->name, cgpu->device_id);
+		return false;
+	}
+	cgpu->last_nonce = nonce;
+	return true;
+}
+
+/* Returns true if nonce for work was a valid share and not a dupe of the very last
+ * nonce submitted by this device. */
 bool submit_nonce(struct thr_info *thr, struct work *work, uint32_t nonce)
 {
-	if (test_nonce(work, nonce))
+	if (new_nonce(thr, nonce) && test_nonce(work, nonce))
 		submit_tested_work(thr, work);
 	else {
 		inc_hw_errors(thr);
@@ -8483,16 +8594,14 @@ static void *watchdog_thread(void __maybe_unused *userdata)
 			struct thr_info *thr = cgpu->thr[0];
 			enum dev_enable *denable;
 			char dev_str[8];
-			int gpu;
 
 			if (!thr)
 				continue;
 
 			cgpu->drv->get_stats(cgpu);
 
-			gpu = cgpu->device_id;
 			denable = &cgpu->deven;
-			snprintf(dev_str, sizeof(dev_str), "%s%d", cgpu->drv->name, gpu);
+			snprintf(dev_str, sizeof(dev_str), "%s %d", cgpu->drv->name, cgpu->device_id);
 
 			/* Thread is waiting on getwork or disabled */
 			if (thr->getwork || *denable == DEV_DISABLED)
