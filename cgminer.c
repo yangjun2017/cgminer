@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Con Kolivas
+ * Copyright 2011-2015 Con Kolivas
  * Copyright 2011-2012 Luke Dashjr
  * Copyright 2010 Jeff Garzik
  *
@@ -166,7 +166,6 @@ int opt_queue = 1;
 static int max_queue = 1;
 int opt_scantime = -1;
 int opt_expiry = 120;
-static const bool opt_time = true;
 unsigned long long global_hashrate;
 unsigned long global_quota_gcd = 1;
 time_t last_getwork;
@@ -1999,11 +1998,21 @@ void clean_work(struct work *work)
 }
 
 /* All dynamically allocated work structs should be freed here to not leak any
- * ram from arrays allocated within the work struct */
-void _free_work(struct work *work)
+ * ram from arrays allocated within the work struct. Null the actual pointer
+ * used to call free_work. */
+void _free_work(struct work **workptr, const char *file, const char *func, const int line)
 {
+	struct work *work = *workptr;
+
+	if (unlikely(!work)) {
+		applog(LOG_ERR, "Free work called with null work from %s %s:%d",
+		       file, func, line);
+		return;
+	}
+
 	clean_work(work);
 	free(work);
+	*workptr = NULL;
 }
 
 static void gen_hash(unsigned char *data, unsigned char *hash, int len);
@@ -4609,8 +4618,15 @@ void switch_pools(struct pool *selected)
 
 }
 
-void _discard_work(struct work *work)
+void _discard_work(struct work **workptr, const char *file, const char *func, const int line)
 {
+	struct work *work = *workptr;
+
+	if (unlikely(!work)) {
+		applog(LOG_ERR, "Discard work called with null work from %s %s:%d",
+		       file, func, line);
+		return;
+	}
 	if (!work->clone && !work->rolls && !work->mined) {
 		if (work->pool) {
 			work->pool->discarded_work++;
@@ -4621,7 +4637,7 @@ void _discard_work(struct work *work)
 		applog(LOG_DEBUG, "Discarded work");
 	} else
 		applog(LOG_DEBUG, "Discarded cloned or rolled work");
-	free_work(work);
+	_free_work(workptr, file, func, line);
 }
 
 static void wake_gws(void)
@@ -4779,17 +4795,6 @@ static bool block_exists(char *hexstr)
 	if (s)
 		return true;
 	return false;
-}
-
-/* Tests if this work is from a block that has been seen before */
-static inline bool from_existing_block(struct work *work)
-{
-	char *hexstr = bin2hex(work->data + 8, 18);
-	bool ret;
-
-	ret = block_exists(hexstr);
-	free(hexstr);
-	return ret;
 }
 
 static int block_sort(struct block *blocka, struct block *blockb)
@@ -8827,6 +8832,8 @@ static void *test_pool_thread(void *arg)
 	if (!pool->blocking)
 		pthread_detach(pthread_self());
 retry:
+	if (pool->removed)
+		goto out;
 	if (pool_active(pool, false)) {
 		pool_tset(pool, &pool->lagging);
 		pool_tclear(pool, &pool->idle);
@@ -8853,7 +8860,7 @@ retry:
 	}
 
 	pool->testing = false;
-
+out:
 	return NULL;
 }
 

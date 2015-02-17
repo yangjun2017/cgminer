@@ -85,7 +85,7 @@ static cgtimer_t usb11_cgt;
 #define BITFORCE_TIMEOUT_MS 200
 #define MODMINER_TIMEOUT_MS 100
 #define AVALON_TIMEOUT_MS 200
-#define AVALON4_TIMEOUT_MS 50
+#define AVALON4_TIMEOUT_MS 200
 #define KLONDIKE_TIMEOUT_MS 200
 #define COINTERRA_TIMEOUT_MS 200
 #define HASHFAST_TIMEOUT_MS 500
@@ -441,7 +441,7 @@ static struct usb_find_devices find_dev[] = {
 		.ident = IDENT_BAS,
 		.idVendor = IDVENDOR_FTDI,
 		.idProduct = 0x6014,
-		//.iManufacturer = "Butterfly Labs",
+		.iManufacturer = "Butterfly Labs",
 		.iProduct = "BitFORCE SHA256 SC",
 		.config = 1,
 		.timeout = BFLSC_TIMEOUT_MS,
@@ -453,7 +453,7 @@ static struct usb_find_devices find_dev[] = {
 		.ident = IDENT_BMA,
 		.idVendor = IDVENDOR_FTDI,
 		.idProduct = 0x6014,
-		//.iManufacturer = "BUTTERFLY LABS"
+		.iManufacturer = "BUTTERFLY LABS",
 		.iProduct = "BitFORCE SC-28nm",
 		.config = 1,
 		.timeout = BFLSC_TIMEOUT_MS,
@@ -560,8 +560,8 @@ static struct usb_find_devices find_dev[] = {
 		.timeout = BLOCKERUPTER_TIMEOUT_MS,
 		.latency = LATENCY_UNUSED,
 		INTINFO(bet_ints) },
-	
-#endif	
+
+#endif
 #ifdef USE_DRILLBIT
 	{
 		.drv = DRIVER_drillbit,
