@@ -1,5 +1,6 @@
 /*
  * Copyright 2011-2015 Con Kolivas
+ * Copyright 2011-2015 Andrew Smith
  * Copyright 2010 Jeff Garzik
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -420,7 +421,7 @@ static size_t resp_hdr_cb(void *ptr, size_t size, size_t nmemb, void *user_data)
 				sscanf(val + 7, "%d", &hi->rolltime);
 				hi->hadexpire = true;
 			} else
-				hi->rolltime = opt_scantime;
+				hi->rolltime = max_scantime;
 			applog(LOG_DEBUG, "X-Roll-Ntime expiry set to %d", hi->rolltime);
 		}
 	}
@@ -2047,6 +2048,8 @@ static bool parse_notify(struct pool *pool, json_t *val)
 		}
 	}
 	pool->merkles = merkles;
+	if (pool->merkles < 2)
+		pool->bad_work++;
 	if (clean)
 		pool->nonce2 = 0;
 #if 0
@@ -2197,6 +2200,7 @@ static bool parse_reconnect(struct pool *pool, json_t *val)
 {
 	char *sockaddr_url, *stratum_port, *tmp;
 	char *url, *port, address[256];
+	int port_no;
 
 	memset(address, 0, 255);
 	url = (char *)json_string_value(json_array_get(val, 0));
@@ -2223,9 +2227,15 @@ static bool parse_reconnect(struct pool *pool, json_t *val)
 		}
 	}
 
-	port = (char *)json_string_value(json_array_get(val, 1));
-	if (!port)
-		port = pool->stratum_port;
+	port_no = json_integer_value(json_array_get(val, 1));
+	if (port_no) {
+		port = alloca(256);
+		sprintf(port, "%d", port_no);
+	} else {
+		port = (char *)json_string_value(json_array_get(val, 1));
+		if (!port)
+			port = pool->stratum_port;
+	}
 
 	snprintf(address, 254, "%s:%s", url, port);
 

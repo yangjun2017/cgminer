@@ -2,7 +2,7 @@
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 m4_define([v_maj], [4])
 m4_define([v_min], [9])
-m4_define([v_mic], [1])
+m4_define([v_mic], [2])
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 m4_define([v_ver], [v_maj.v_min.v_mic])
 m4_define([lt_rev], m4_eval(v_maj + v_min))
@@ -130,8 +130,9 @@ fi
 # All drivers should prepend an x to the drivercount
 
 standalone="no"
-ants1="no"
 drivercount=""
+
+ants1="no"
 
 AC_ARG_ENABLE([ants1],
 	[AC_HELP_STRING([--enable-ants1],[Compile support for Antminer S1 Bitmain STANDALONE(default disabled)])],
@@ -143,7 +144,6 @@ if test "x$ants1" = xyes; then
 	standalone="yes"
 fi
 AM_CONDITIONAL([HAS_ANT_S1], [test x$ants1 = xyes])
-
 
 ants2="no"
 
@@ -157,6 +157,19 @@ if test "x$ants2" = xyes; then
 	standalone="yes"
 fi
 AM_CONDITIONAL([HAS_ANT_S2], [test x$ants2 = xyes])
+
+ants3="no"
+
+AC_ARG_ENABLE([ants3],
+	[AC_HELP_STRING([--enable-ants3],[Compile support for Antminer S3 Bitmain STANDALONE(default disabled)])],
+	[ants3=$enableval]
+	)
+if test "x$ants3" = xyes; then
+	AC_DEFINE([USE_ANT_S3], [1], [Defined to 1 if Antminer S3 Bitmain support is wanted])
+	drivercount=x$drivercount
+	standalone="yes"
+fi
+AM_CONDITIONAL([HAS_ANT_S3], [test x$ants3 = xyes])
 
 avalon="no"
 
@@ -266,7 +279,7 @@ AM_CONDITIONAL([HAS_BITMINE_A1], [test x$bitmine_A1 = xyes])
 blockerupter="no"
 
 AC_ARG_ENABLE([blockerupter],
-	[AC_HELP_STRING([--enable-blockerupter],[Compile support for BlockErupter (default disabled)])],
+	[AC_HELP_STRING([--enable-blockerupter],[Compile support for BlockErupter BROKEN DRIVER (default disabled)])],
 	[blockerupter=$enableval]
 	)
 if test "x$blockerupter" = xyes; then
@@ -460,7 +473,7 @@ fi
 
 
 #Add a new device to this list if it needs libusb, along with a no on the end.
-if test x$avalon$avalon2$avalon4$bitforce$bitfury$blockerupter$modminer$bflsc$icarus$hashfast$hashratio$klondike$drillbit$cointerra$ants1$ants2 != xnononononononononononononononono; then
+if test x$avalon$avalon2$avalon4$bitforce$bitfury$blockerupter$modminer$bflsc$icarus$hashfast$hashratio$klondike$drillbit$cointerra$ants1$ants3 != xnononononononononononononononono; then
 	want_usbutils=true
 else
 	want_usbutils=false
@@ -529,8 +542,29 @@ fi
 
 AM_CONDITIONAL([WANT_STATIC_LIBUSB], [test x$dlibusb = xno])
 
-AC_CONFIG_SUBDIRS([compat/jansson-2.6])
-JANSSON_LIBS="compat/jansson-2.6/src/.libs/libjansson.a"
+djansson="no"
+AC_ARG_WITH([system-jansson],
+	[AC_HELP_STRING([--with-system-jansson],[NOT RECOMMENDED! Compile against dynamic system jansson. (Default use included static jansson)])],
+	[djansson=$withval]
+)
+
+if test "x$djansson" != xno; then
+	case $target in
+		*-*-freebsd*)
+			JANSSON_LIBS="-ljansson"
+			JANSSON_CFLAGS=""
+			AC_DEFINE(HAVE_JANSSON, 1, [Define if you have jansson >= 2.6])
+			;;
+		*)
+			PKG_CHECK_MODULES(JANSSON, jansson >= 2.6, [AC_DEFINE(HAVE_JANSSON, 1, [Define if you have jansson >= 2.6])], [AC_MSG_ERROR([Could not find jansson library - please install jansson >= 2.6])])
+			;;
+	esac
+else
+	AC_CONFIG_SUBDIRS([compat/jansson-2.6])
+	JANSSON_LIBS="compat/jansson-2.6/src/.libs/libjansson.a"
+fi
+
+AM_CONDITIONAL([WANT_STATIC_JANSSON], [test x$djansson = xno])
 
 PKG_PROG_PKG_CONFIG()
 
@@ -566,6 +600,23 @@ else
 fi
 AC_SUBST(LIBCURL_LIBS)
 
+libsystemd="no"
+
+AC_ARG_ENABLE([libsystemd],
+	[AC_HELP_STRING([--enable-libsystemd],[Enable building with libsystemd for watchdog and status notification support])],
+	[libsystemd=$enableval]
+)
+
+if test "x$libsystemd" != xno; then
+	if test "x$have_linux" != xtrue; then
+		AC_MSG_ERROR([libsystemd is only supported on Linux platforms])
+	fi
+
+	PKG_CHECK_MODULES(LIBSYSTEMD, libsystemd, , AC_MSG_ERROR(Could not find libsystemd dev))
+	AC_DEFINE([USE_LIBSYSTEMD], [1], [Defined to 1 if libsystemd support is wanted])
+else
+	LIBSYSTEMD_LIBS=""
+fi
 
 #check execv signature
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([
@@ -650,6 +701,12 @@ else
 	echo "  libcurl(GBT+getwork).: Disabled"
 fi
 
+if test "x$libsystemd" != xno; then
+	echo "  libsystemd...........: Enabled: $LIBSYSTEMD_LIBS"
+else
+	echo "  libsystemd...........: Disabled"
+fi
+
 echo "  curses.TUI...........: $cursesmsg"
 
 
@@ -664,6 +721,12 @@ if test "x$ants2" = xyes; then
 	echo "  Antminer.S2.Bitmain..: Enabled"
 else
 	echo "  Antminer.S2.Bitmain..: Disabled"
+fi
+
+if test "x$ants3" = xyes; then
+	echo "  Antminer.S3.Bitmain..: Enabled"
+else
+	echo "  Antminer.S3.Bitmain..: Disabled"
 fi
 
 if test "x$avalon" = xyes; then
@@ -789,7 +852,7 @@ else
 fi
 
 #Add any new device to this, along with a no on the end of the test
-if test "x$avalon$avalon2$avalon4$bab$bflsc$bitforce$bitfury$blockerupter$hashfast$hashratio$icarus$klondike$knc$modminer$drillbit$minion$cointerra$bitmine_A1$ants1$ants2$sp10$sp30" = xnononononononononononononononononononononono; then
+if test "x$avalon$avalon2$avalon4$bab$bflsc$bitforce$bitfury$blockerupter$hashfast$hashratio$icarus$klondike$knc$modminer$drillbit$minion$cointerra$bitmine_A1$ants1$ants2$ants3$sp10$sp30" = xnonononononononononononononononononononononono; then
 	echo
 	AC_MSG_ERROR([No mining devices configured in])
 	echo
@@ -808,12 +871,16 @@ echo "Compilation............: make (or gmake)"
 echo "  CPPFLAGS.............: $CPPFLAGS"
 echo "  CFLAGS...............: $CFLAGS"
 echo "  LDFLAGS..............: $LDFLAGS $PTHREAD_FLAGS"
-echo "  LDADD................: $DLOPEN_FLAGS $LIBCURL_LIBS $JANSSON_LIBS $PTHREAD_LIBS $NCURSES_LIBS $PDCURSES_LIBS $WS2_LIBS $MATH_LIBS $LIBUSB_LIBS $RT_LIBS"
+echo "  LDADD................: $DLOPEN_FLAGS $LIBCURL_LIBS $LIBSYSTEMD_LIBS $JANSSON_LIBS $PTHREAD_LIBS $NCURSES_LIBS $PDCURSES_LIBS $WS2_LIBS $MATH_LIBS $LIBUSB_LIBS $RT_LIBS"
 echo
 echo "Installation...........: make install (as root if needed, with 'su' or 'sudo')"
 echo "  prefix...............: $prefix"
 echo
 if test "x$want_usbutils$dlibusb" = xyesyes; then
 echo "*** SYSTEM LIBUSB BEING ADDED - NOT RECOMMENDED UNLESS YOU ARE UNABLE TO COMPILE THE INCLUDED LIBUSB ***"
+echo
+fi
+if test "x$djansson" = xyes; then
+echo "*** SYSTEM JANSSON BEING ADDED - NOT RECOMMENDED UNLESS YOU ARE UNABLE TO COMPILE THE INCLUDED JANSSON ***"
 echo
 fi
