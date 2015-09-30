@@ -173,6 +173,7 @@ const int max_expiry = 600;
 unsigned long long global_hashrate;
 unsigned long global_quota_gcd = 1;
 time_t last_getwork;
+int opt_pool_fallback = 120;
 
 #if defined(USE_USBUTILS)
 int nDevs;
@@ -516,14 +517,15 @@ void get_datestamp(char *f, size_t fsiz, struct timeval *tv)
 	struct tm *tm;
 
 	const time_t tmp_time = tv->tv_sec;
+	int ms = (int)(tv->tv_usec / 1000);
 	tm = localtime(&tmp_time);
-	snprintf(f, fsiz, "[%d-%02d-%02d %02d:%02d:%02d]",
+	snprintf(f, fsiz, "[%d-%02d-%02d %02d:%02d:%02d.%03d]",
 		tm->tm_year + 1900,
 		tm->tm_mon + 1,
 		tm->tm_mday,
 		tm->tm_hour,
 		tm->tm_min,
-		tm->tm_sec);
+		tm->tm_sec, ms);
 }
 
 static void get_timestamp(char *f, size_t fsiz, struct timeval *tv)
@@ -531,11 +533,12 @@ static void get_timestamp(char *f, size_t fsiz, struct timeval *tv)
 	struct tm *tm;
 
 	const time_t tmp_time = tv->tv_sec;
+	int ms = (int)(tv->tv_usec / 1000);
 	tm = localtime(&tmp_time);
-	snprintf(f, fsiz, "[%02d:%02d:%02d]",
+	snprintf(f, fsiz, "[%02d:%02d:%02d.%03d]",
 		tm->tm_hour,
 		tm->tm_min,
-		tm->tm_sec);
+		tm->tm_sec, ms);
 }
 
 static char exit_buf[512];
@@ -1412,6 +1415,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--failover-only",
 			set_null, &opt_set_null,
 			opt_hidden),
+	OPT_WITH_ARG("--fallback-time",
+		     opt_set_intval, opt_show_intval, &opt_pool_fallback,
+		     "Set time in seconds to fall back to a higher priority pool after period of instability"),
 	OPT_WITHOUT_ARG("--fix-protocol",
 			opt_set_bool, &opt_fix_protocol,
 			"Do not redirect to stratum protocol from GBT"),
@@ -6117,12 +6123,10 @@ static void *stratum_rthread(void *userdata)
 
 			wait_lpcurrent(pool);
 			while (!restart_stratum(pool)) {
+				pool_died(pool);
 				if (pool->removed)
 					goto out;
-				if (enabled_pools > 1)
-					cgsleep_ms(30000);
-				else
-					cgsleep_ms(3000);
+				cgsleep_ms(5000);
 			}
 		}
 
@@ -6155,9 +6159,10 @@ static void *stratum_rthread(void *userdata)
 				restart_threads();
 
 			while (!restart_stratum(pool)) {
+				pool_died(pool);
 				if (pool->removed)
 					goto out;
-				cgsleep_ms(30000);
+				cgsleep_ms(5000);
 			}
 			continue;
 		}
@@ -8171,18 +8176,20 @@ static void prune_stratum_shares(struct pool *pool)
 static void *watchpool_thread(void __maybe_unused *userdata)
 {
 	int intervals = 0;
+	cgtimer_t cgt;
 
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
 	RenameThread("Watchpool");
 
 	set_lowprio();
+	cgtimer_time(&cgt);
 
 	while (42) {
 		struct timeval now;
 		int i;
 
-		if (++intervals > 20)
+		if (++intervals > 120)
 			intervals = 0;
 		cgtime(&now);
 
@@ -8195,7 +8202,7 @@ static void *watchpool_thread(void __maybe_unused *userdata)
 			}
 
 			/* Get a rolling utility per pool over 10 mins */
-			if (intervals > 19) {
+			if (intervals > 119) {
 				double shares = pool->diff1 - pool->last_shares;
 
 				pool->last_shares = pool->diff1;
@@ -8211,21 +8218,19 @@ static void *watchpool_thread(void __maybe_unused *userdata)
 			if (unlikely(pool->testing))
 				continue;
 
-			/* Test pool is idle once every minute */
-			if (pool->idle && now.tv_sec - pool->tv_idle.tv_sec > 30) {
-				if (pool_active(pool, true) && pool_tclear(pool, &pool->idle))
+			if (pool_active(pool, true)) {
+				if (pool_tclear(pool, &pool->idle))
 					pool_resus(pool);
-				else
-					cgtime(&pool->tv_idle);
-			}
+			} else
+				cgtime(&pool->tv_idle);
 
 			/* Only switch pools if the failback pool has been
 			 * alive for more than 5 minutes to prevent
 			 * intermittently failing pools from being used. */
 			if (!pool->idle && pool_strategy == POOL_FAILOVER && pool->prio < cp_prio() &&
-			    now.tv_sec - pool->tv_idle.tv_sec > 300) {
-				applog(LOG_WARNING, "Pool %d %s stable for 5 mins",
-				       pool->pool_no, pool->rpc_url);
+			    now.tv_sec - pool->tv_idle.tv_sec > opt_pool_fallback) {
+				applog(LOG_WARNING, "Pool %d %s stable for >%d seconds",
+				       pool->pool_no, pool->rpc_url, opt_pool_fallback);
 				switch_pools(NULL);
 			}
 		}
@@ -8238,8 +8243,8 @@ static void *watchpool_thread(void __maybe_unused *userdata)
 			switch_pools(NULL);
 		}
 
-		cgsleep_ms(30000);
-
+		cgsleep_ms_r(&cgt, 5000);
+		cgtimer_time(&cgt);
 	}
 	return NULL;
 }
