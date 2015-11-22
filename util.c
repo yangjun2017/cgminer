@@ -1831,7 +1831,7 @@ static void clear_sock(struct pool *pool)
 }
 
 /* Realloc memory to new size and zero any extra memory added */
-void _recalloc(void **ptr, size_t old, size_t new, const char *file, const char *func, const int line)
+void _cgrecalloc(void **ptr, size_t old, size_t new, const char *file, const char *func, const int line)
 {
 	if (new == old)
 		return;
