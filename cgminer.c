@@ -81,6 +81,10 @@ char *curly = ":D";
 #include "driver-avalon4.h"
 #endif
 
+#ifdef USE_AVALON_MINER
+#include "driver-avalon-miner.h"
+#endif
+
 #ifdef USE_BFLSC
 #include "driver-bflsc.h"
 #endif
@@ -243,6 +247,10 @@ static char *opt_set_avalon2_voltage;
 static char *opt_set_avalon4_fan;
 static char *opt_set_avalon4_voltage;
 static char *opt_set_avalon4_freq;
+#endif
+#ifdef USE_AVALON_MINER
+static char *opt_set_avalonm_voltage;
+static char *opt_set_avalonm_freq;
 #endif
 #ifdef USE_BLOCKERUPTER
 int opt_bet_clk = 0;
@@ -781,6 +789,11 @@ static char *set_int_0_to_255(const char *arg, int *i)
         return set_int_range(arg, i, 0, 255);
 }
 
+static char *set_int_1_to_255(const char *arg, int *i)
+{
+        return set_int_range(arg, i, 1, 255);
+}
+
 static char *set_int_0_to_200(const char *arg, int *i)
 {
 	return set_int_range(arg, i, 0, 200);
@@ -791,14 +804,14 @@ static char *set_int_32_to_63(const char *arg, int *i)
 	return set_int_range(arg, i, 32, 63);
 }
 
-static char *set_int_22_to_55(const char *arg, int *i)
+static char *set_int_22_to_75(const char *arg, int *i)
 {
-	return set_int_range(arg, i, 22, 55);
+	return set_int_range(arg, i, 22, 75);
 }
 
-static char *set_int_42_to_65(const char *arg, int *i)
+static char *set_int_42_to_85(const char *arg, int *i)
 {
-	return set_int_range(arg, i, 42, 62);
+	return set_int_range(arg, i, 42, 85);
 }
 
 static char *set_int_1_to_10(const char *arg, int *i)
@@ -1250,10 +1263,10 @@ static struct opt_table opt_config_table[] = {
 		     set_avalon4_fan, NULL, &opt_set_avalon4_fan,
 		     "Set Avalon4 target fan speed range"),
 	OPT_WITH_ARG("--avalon4-temp",
-		     set_int_22_to_55, opt_show_intval, &opt_avalon4_temp_target,
+		     set_int_22_to_75, opt_show_intval, &opt_avalon4_temp_target,
 		     "Set Avalon4 target temperature"),
 	OPT_WITH_ARG("--avalon4-cutoff",
-		     set_int_42_to_65, opt_show_intval, &opt_avalon4_overheat,
+		     set_int_42_to_85, opt_show_intval, &opt_avalon4_overheat,
 		     "Set Avalon4 overheat cut off temperature"),
 	OPT_WITH_ARG("--avalon4-polling-delay",
 		     set_int_1_to_65535, opt_show_intval, &opt_avalon4_polling_delay,
@@ -1267,6 +1280,50 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_ARG("--avalon4-aucxdelay",
 		     opt_set_intval, opt_show_intval, &opt_avalon4_aucxdelay,
 		     "Set Avalon4 AUC IIC xfer read delay, 4800 ~= 1ms"),
+	OPT_WITH_ARG("--avalon4-miningmode",
+		     opt_set_intval, opt_show_intval, &opt_avalon4_miningmode,
+		     "Set Avalon4 mining mode(0:custom, 1:eco, 2:normal, 3:turbo"),
+	OPT_WITHOUT_ARG("--avalon4-freezesafe",
+			opt_set_bool, &opt_avalon4_freezesafe,
+			"Make Avalon4 running as a radiator when stratum server failed"),
+	OPT_WITH_ARG("--avalon4-ntcb",
+		     opt_set_intval, opt_show_intval, &opt_avalon4_ntcb,
+		     "Set Avalon4 MM NTC B value"),
+	OPT_WITH_ARG("--avalon4-freq-min",
+		     opt_set_intval, opt_show_intval, &opt_avalon4_freq_min,
+		     "Set minimum frequency for Avalon4"),
+	OPT_WITH_ARG("--avalon4-freq-max",
+		     opt_set_intval, opt_show_intval, &opt_avalon4_freq_max,
+		     "Set maximum frequency for Avalon4"),
+	OPT_WITHOUT_ARG("--avalon4-noncecheck-off",
+		     opt_set_invbool, &opt_avalon4_noncecheck,
+		     "Disable A3218 inside nonce check function"),
+	OPT_WITHOUT_ARG("--avalon4-smart-speed-off",
+		     opt_set_invbool, &opt_avalon4_smart_speed,
+		     "Disable A3218 smart speed funciton"),
+	OPT_WITH_ARG("--avalon4-speed-bingo",
+		     set_int_1_to_255, opt_show_intval, &opt_avalon4_speed_bingo,
+		     "Set A3218 speed bingo for smart speed"),
+	OPT_WITH_ARG("--avalon4-speed-error",
+		     set_int_1_to_255, opt_show_intval, &opt_avalon4_speed_error,
+		     "Set A3218 speed error for smart speed"),
+#endif
+#ifdef USE_AVALON_MINER
+	OPT_WITH_CBARG("--avalonm-voltage",
+		     set_avalonm_voltage, NULL, &opt_set_avalonm_voltage,
+		     "Set Avalon miner core voltage, in millivolts, step: 125"),
+	OPT_WITH_CBARG("--avalonm-freq",
+		     set_avalonm_freq, NULL, &opt_set_avalonm_freq,
+		     "Set frequency for Avalon miner, 1 to 3 values, example: 275:250:200"),
+	OPT_WITH_ARG("--avalonm-ntime-offset",
+		     opt_set_intval, opt_show_intval, &opt_avalonm_ntime_offset,
+		     "Set Avalon miner ntime rolling max offset, range 0-4"),
+	OPT_WITH_ARG("--avalonm-spispeed",
+		     opt_set_intval, opt_show_intval, &opt_avalonm_spispeed,
+		     "Set spi speed for Avalon miner"),
+	OPT_WITHOUT_ARG("--avalonm-automatic-freq",
+			opt_set_bool, &opt_avalonm_autof,
+			"Automatic adjust frequency base on chip HW"),
 #endif
 #ifdef USE_BAB
 	OPT_WITH_ARG("--bab-options",
@@ -1895,6 +1952,9 @@ static char *opt_verusage_and_exit(const char *extra)
 #endif
 #ifdef USE_AVALON4
 		"avalon4 "
+#endif
+#ifdef USE_AVALON_MINER
+		"avalon miner"
 #endif
 #ifdef USE_BFLSC
 		"bflsc "
@@ -4616,7 +4676,7 @@ static void signal_work_update(void)
 	rd_unlock(&mining_thr_lock);
 }
 
-static void set_curblock(char *hexstr, unsigned char *bedata)
+static void set_curblock(const char *hexstr, const unsigned char *bedata)
 {
 	int ofs;
 
@@ -4637,20 +4697,6 @@ static void set_curblock(char *hexstr, unsigned char *bedata)
 	applog(LOG_INFO, "New block: %s... diff %s", current_hash, block_diff);
 }
 
-/* Search to see if this string is from a block that has been seen before */
-static bool block_exists(char *hexstr)
-{
-	struct block *s;
-
-	rd_lock(&blk_lock);
-	HASH_FIND_STR(blocks, hexstr, s);
-	rd_unlock(&blk_lock);
-
-	if (s)
-		return true;
-	return false;
-}
-
 static int block_sort(struct block *blocka, struct block *blockb)
 {
 	return blocka->block_no - blockb->block_no;
@@ -4661,6 +4707,8 @@ static void set_blockdiff(const struct work *work)
 {
 	uint8_t pow = work->data[72];
 	int powdiff = (8 * (0x1d - 3)) - (8 * (pow - 3));
+	if (powdiff < 8)
+		powdiff = 8;
 	uint32_t diff32 = be32toh(*((uint32_t *)(work->data + 72))) & 0x00FFFFFF;
 	double numerator = 0xFFFFULL << powdiff;
 	double ddiff = numerator / (double)diff32;
@@ -4672,31 +4720,23 @@ static void set_blockdiff(const struct work *work)
 	}
 }
 
-static bool test_work_current(struct work *work)
+/* Search to see if this string is from a block that has been seen before */
+static bool block_exists(const char *hexstr, const unsigned char *bedata, const struct work *work)
 {
-	struct pool *pool = work->pool;
-	unsigned char bedata[32];
-	char hexstr[68];
+	int deleted_block = 0;
+	struct block *s;
 	bool ret = true;
 
-	if (work->mandatory)
-		return ret;
-
-	swap256(bedata, work->data + 4);
-	__bin2hex(hexstr, bedata, 32);
-
-	/* Search to see if this block exists yet and if not, consider it a
-	 * new block and set the current block details to this one */
-	if (!block_exists(hexstr)) {
-		struct block *s = cgcalloc(sizeof(struct block), 1);
-		int deleted_block = 0;
-
+	wr_lock(&blk_lock);
+	HASH_FIND_STR(blocks, hexstr, s);
+	if (!s) {
+		s = cgcalloc(sizeof(struct block), 1);
 		if (unlikely(!s))
-			quit (1, "test_work_current OOM");
+			quit (1, "block_exists OOM");
 		strcpy(s->hash, hexstr);
 		s->block_no = new_blocks++;
 
-		wr_lock(&blk_lock);
+		ret = false;
 		/* Only keep the last hour's worth of blocks in memory since
 		 * work from blocks before this is virtually impossible and we
 		 * want to prevent memory usage from continually rising */
@@ -4711,11 +4751,52 @@ static bool test_work_current(struct work *work)
 		}
 		HASH_ADD_STR(blocks, hash, s);
 		set_blockdiff(work);
-		wr_unlock(&blk_lock);
-
 		if (deleted_block)
 			applog(LOG_DEBUG, "Deleted block %d from database", deleted_block);
+	}
+	wr_unlock(&blk_lock);
+
+	if (!ret)
 		set_curblock(hexstr, bedata);
+	if (deleted_block)
+		applog(LOG_DEBUG, "Deleted block %d from database", deleted_block);
+
+	return ret;
+}
+
+static bool test_work_current(struct work *work)
+{
+	struct pool *pool = work->pool;
+	unsigned char bedata[32];
+	char hexstr[68];
+	bool ret = true;
+	unsigned char *bin_height = &pool->coinbase[43];
+	uint8_t cb_height_sz = bin_height[-1];
+	uint32_t height = 0;
+
+	if (work->mandatory)
+		return ret;
+
+	swap256(bedata, work->data + 4);
+	__bin2hex(hexstr, bedata, 32);
+
+	/* Calculate block height */
+	if (cb_height_sz <= 4) {
+		memcpy(&height, bin_height, cb_height_sz);
+		height = le32toh(height);
+		height--;
+	}
+
+	cg_wlock(&pool->data_lock);
+	if (pool->swork.clean) {
+		pool->swork.clean = false;
+		work->longpoll = true;
+	}
+	cg_wunlock(&pool->data_lock);
+
+	/* Search to see if this block exists yet and if not, consider it a
+	 * new block and set the current block details to this one */
+	if (!block_exists(hexstr, bedata, work)) {
 		/* Copy the information to this pool's prev_block since it
 		 * knows the new block exists. */
 		cg_memcpy(pool->prev_block, bedata, 32);
@@ -4728,8 +4809,8 @@ static bool test_work_current(struct work *work)
 
 		if (work->longpoll) {
 			if (work->stratum) {
-				applog(LOG_NOTICE, "Stratum from pool %d detected new block",
-				       pool->pool_no);
+				applog(LOG_NOTICE, "Stratum from pool %d detected new block at height %d",
+				       pool->pool_no, height);
 			} else {
 				applog(LOG_NOTICE, "%sLONGPOLL from pool %d detected new block",
 				       work->gbt ? "GBT " : "", work->pool->pool_no);
@@ -4747,12 +4828,12 @@ static bool test_work_current(struct work *work)
 			 * block. */
 			if (memcmp(bedata, current_block, 32)) {
 				/* Doesn't match current block. It's stale */
-				applog(LOG_DEBUG, "Stale data from pool %d", pool->pool_no);
+				applog(LOG_DEBUG, "Stale data from pool %d at height %d", pool->pool_no, height);
 				ret = false;
 			} else {
 				/* Work is from new block and pool is up now
 				 * current. */
-				applog(LOG_INFO, "Pool %d now up to date", pool->pool_no);
+				applog(LOG_INFO, "Pool %d now up to date at height %d", pool->pool_no, height);
 				cg_memcpy(pool->prev_block, bedata, 32);
 			}
 		}
@@ -4992,11 +5073,12 @@ void write_config(FILE *fcfg)
 			     (void *)opt->cb_arg == (void *)set_int_1_to_10 ||
 			     (void *)opt->cb_arg == (void *)set_int_0_to_100 ||
 			     (void *)opt->cb_arg == (void *)set_int_0_to_255 ||
+			     (void *)opt->cb_arg == (void *)set_int_1_to_255 ||
 			     (void *)opt->cb_arg == (void *)set_int_0_to_200 ||
 			     (void *)opt->cb_arg == (void *)set_int_0_to_4 ||
 			     (void *)opt->cb_arg == (void *)set_int_32_to_63 ||
-			     (void *)opt->cb_arg == (void *)set_int_22_to_55 ||
-			     (void *)opt->cb_arg == (void *)set_int_42_to_65)) {
+			     (void *)opt->cb_arg == (void *)set_int_22_to_75 ||
+			     (void *)opt->cb_arg == (void *)set_int_42_to_85)) {
 				fprintf(fcfg, ",\n\"%s\" : \"%d\"", p+2, *(int *)opt->u.arg);
 				continue;
 			}
@@ -6202,9 +6284,7 @@ static void *stratum_rthread(void *userdata)
 
 			/* Generate a single work item to update the current
 			 * block database */
-			pool->swork.clean = false;
 			gen_stratum_work(pool, work);
-			work->longpoll = true;
 			/* Return value doesn't matter. We're just informing
 			 * that we may need to restart. */
 			test_work_current(work);
@@ -6783,7 +6863,7 @@ void set_target(unsigned char *dest_target, double diff)
 	cg_memcpy(dest_target, target, 32);
 }
 
-#if defined (USE_AVALON2) || defined (USE_AVALON4) || defined (USE_HASHRATIO)
+#if defined (USE_AVALON2) || defined (USE_AVALON4) || defined (USE_AVALON_MINER) || defined (USE_HASHRATIO)
 bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *real_pool,
 			 uint32_t nonce2, uint32_t nonce,  uint32_t ntime)
 {
@@ -7635,6 +7715,19 @@ struct work *find_queued_work_byid(struct cgpu_info *cgpu, uint32_t id)
 
 	rd_lock(&cgpu->qlock);
 	ret = __find_work_byid(cgpu->queued_work, id);
+	rd_unlock(&cgpu->qlock);
+
+	return ret;
+}
+
+struct work *clone_queued_work_byid(struct cgpu_info *cgpu, uint32_t id)
+{
+	struct work *work, *ret = NULL;
+
+	rd_lock(&cgpu->qlock);
+	work = __find_work_byid(cgpu->queued_work, id);
+	if (work)
+		ret = copy_work(work);
 	rd_unlock(&cgpu->qlock);
 
 	return ret;
@@ -8920,10 +9013,16 @@ static void noop_hash_work(struct thr_info __maybe_unused *thr)
 {
 }
 
+static void generic_zero_stats(struct cgpu_info *cgpu)
+{
+	cgpu->diff_accepted =
+	cgpu->diff_rejected =
+	cgpu->hw_errors = 0;
+}
+
 #define noop_flush_work noop_reinit_device
 #define noop_update_work noop_reinit_device
 #define noop_queue_full noop_get_stats
-#define noop_zero_stats noop_reinit_device
 #define noop_identify_device noop_reinit_device
 
 /* Fill missing driver drv functions with noops */
@@ -8962,7 +9061,7 @@ void fill_device_drv(struct device_drv *drv)
 	if (!drv->queue_full)
 		drv->queue_full = &noop_queue_full;
 	if (!drv->zero_stats)
-		drv->zero_stats = &noop_zero_stats;
+		drv->zero_stats = &generic_zero_stats;
 	/* If drivers support internal diff they should set a max_diff or
 	 * we will assume they don't and set max to 1. */
 	if (!drv->max_diff)
@@ -8992,7 +9091,7 @@ void null_device_drv(struct device_drv *drv)
 	drv->thread_shutdown = &noop_thread_shutdown;
 	drv->thread_enable = &noop_thread_enable;
 
-	drv->zero_stats = &noop_zero_stats;
+	drv->zero_stats = &generic_zero_stats;
 
 	drv->hash_work = &noop_hash_work;
 
@@ -9000,7 +9099,6 @@ void null_device_drv(struct device_drv *drv)
 	drv->flush_work = &noop_flush_work;
 	drv->update_work = &noop_update_work;
 
-	drv->zero_stats = &noop_zero_stats;
 	drv->max_diff = 1;
 	drv->min_diff = 1;
 }
