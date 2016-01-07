@@ -113,13 +113,6 @@ case $target in
     ;;
 esac
 
-have_cgminer_sdk=false
-if test -n "$CGMINER_SDK"; then
-        have_cgminer_sdk=true
-        CPPFLAGS="-I$CGMINER_SDK/include $CPPFLAGS"
-        LDFLAGS="-L$CGMINER_SDK/lib/$target $LDFLAGS"
-fi
-
 has_winpthread=false
 if test "x$have_win32" = xtrue; then
         has_winpthread=true
@@ -593,7 +586,6 @@ if test "x$have_cgminer_sdk" = "xtrue"; then
 	fi
 	PKG_CONFIG="${PKG_CONFIG:-pkg-config} --define-variable=arch=$ARCH_DIR --define-variable=target=$target --define-variable=cgminersdkdir=$CGMINER_SDK"
 	PKG_CONFIG_PATH="$CGMINER_SDK/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-	export PKG_CONFIG_PATH
 fi
 
 AC_SUBST(LIBUSB_LIBS)
@@ -606,10 +598,8 @@ AC_ARG_ENABLE([libcurl],
 
 if test "x$libcurl" != xno; then
 	if test "x$have_win32" != xtrue; then
-		LIBCURL_CHECK_CONFIG([yes], [7.25.0], [AC_DEFINE([CURL_HAS_KEEPALIVE], [1], [Defined if version of curl supports keepalive.])],
-			[LIBCURL_CHECK_CONFIG([yes], [7.18.2], ,[AC_MSG_ERROR([Missing required libcurl dev >= 7.18.2])])])
-		LIBCURL_LIBS=$LIBCURL
-		LIBCURL_CFLAGS=$LIBCURL_CPPFLAGS
+		PKG_CHECK_MODULES([LIBCURL], [libcurl >= 7.25.0], [AC_DEFINE([CURL_HAS_KEEPALIVE], [1], [Defined if version of curl supports keepalive.])],
+			[PKG_CHECK_MODULES([LIBCURL], [libcurl >= 7.18.2], ,[AC_MSG_ERROR([Missing required libcurl dev >= 7.18.2])])])
 	else
 		PKG_CHECK_MODULES([LIBCURL], [libcurl >= 7.25.0], ,[AC_MSG_ERROR([Missing required libcurl dev >= 7.25.0])])
 		AC_DEFINE([CURL_HAS_KEEPALIVE], [1])
@@ -619,7 +609,6 @@ else
 	LIBCURL_LIBS=""
 fi
 AC_SUBST(LIBCURL_LIBS)
-AC_SUBST(LIBCURL_CFLAGS)
 
 libsystemd="no"
 
