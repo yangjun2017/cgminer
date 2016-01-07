@@ -608,12 +608,12 @@ if test "x$libcurl" != xno; then
 	if test "x$have_win32" != xtrue; then
 		LIBCURL_CHECK_CONFIG([yes], [7.25.0], [AC_DEFINE([CURL_HAS_KEEPALIVE], [1], [Defined if version of curl supports keepalive.])],
 			[LIBCURL_CHECK_CONFIG([yes], [7.18.2], ,[AC_MSG_ERROR([Missing required libcurl dev >= 7.18.2])])])
+		LIBCURL_LIBS=$LIBCURL
+		LIBCURL_CFLAGS=$LIBCURL_CPPFLAGS
 	else
-		LIBCURL_CHECK_CONFIG([yes], [7.25.0], ,[AC_MSG_ERROR([Missing required libcurl dev >= 7.25.0])])
+		PKG_CHECK_MODULES([LIBCURL], [libcurl >= 7.25.0], ,[AC_MSG_ERROR([Missing required libcurl dev >= 7.25.0])])
 		AC_DEFINE([CURL_HAS_KEEPALIVE], [1])
 	fi
-	LIBCURL_LIBS=$LIBCURL
-	LIBCURL_CFLAGS=$LIBCURL_CPPFLAGS
 	AC_DEFINE([HAVE_LIBCURL], [1], [Defined to 1 if libcurl support built in])
 else
 	LIBCURL_LIBS=""
