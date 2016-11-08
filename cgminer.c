@@ -84,6 +84,7 @@ char *curly = ":D";
 
 #ifdef USE_AVALON7
 #include "driver-avalon7.h"
+#include "libssplus.h"
 #endif
 
 #ifdef USE_AVALON_MINER
@@ -1461,6 +1462,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--no-avalon7-asic-debug",
 		     opt_set_invbool, &opt_avalon7_asic_debug,
 		     "Disable A3212 debug."),
+	OPT_WITHOUT_ARG("--avalon7-ssplus-enable",
+		     opt_set_bool, &opt_avalon7_ssplus_enable,
+		     "Enable avalon7 smart speed plus."),
 #endif
 #ifdef USE_AVALON_MINER
 	OPT_WITH_CBARG("--avalonm-voltage",
@@ -7231,6 +7235,43 @@ bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *r
 	free_work(work);
 	return ret;
 }
+
+uint32_t gen_merkle_root(struct pool *pool, uint64_t nonce2)
+{
+	unsigned char merkle_root[32], merkle_sha[64];
+	uint32_t *data32, *swap32, tail;
+	uint64_t nonce2le;
+	int i;
+
+	/* Update coinbase. Always use an LE encoded nonce2 to fill in values
+	 * from left to right and prevent overflow errors with small n2sizes */
+	nonce2le = htole64(nonce2);
+	cg_memcpy(pool->coinbase + pool->nonce2_offset, &nonce2le, pool->n2size);
+
+	/* Generate merkle root */
+	gen_hash(pool->coinbase, merkle_root, pool->coinbase_len);
+	cg_memcpy(merkle_sha, merkle_root, 32);
+	for (i = 0; i < pool->merkles; i++) {
+		cg_memcpy(merkle_sha + 32, pool->swork.merkle_bin[i], 32);
+		gen_hash(merkle_sha, merkle_root, 64);
+		cg_memcpy(merkle_sha, merkle_root, 32);
+	}
+	data32 = (uint32_t *)merkle_sha;
+	swap32 = (uint32_t *)merkle_root;
+	flip32(swap32, data32);
+
+	{
+		char *merkle_hash;
+
+		merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
+		applog(LOG_DEBUG, "[M-N2]: %s-%08x-%08x", merkle_hash, (uint32_t)nonce2le, (uint32_t)nonce2);
+		free(merkle_hash);
+	}
+
+	cg_memcpy(&tail, merkle_root + 28, 4);
+
+	return tail;
+}
 #endif
 
 /* Generates stratum based work based on the most recent notify information
@@ -7650,21 +7691,6 @@ bool submit_tested_work(struct thr_info *thr, struct work *work)
 	}
 	work_out = copy_work(work);
 	submit_work_async(work_out);
-	return true;
-}
-
-/* Rudimentary test to see if cgpu has returned the same nonce twice in a row which is
- * always going to be a duplicate which should be reported as a hw error. */
-static bool new_nonce(struct thr_info *thr, uint32_t nonce)
-{
-	struct cgpu_info *cgpu = thr->cgpu;
-
-	if (unlikely(cgpu->last_nonce == nonce)) {
-		applog(LOG_INFO, "%s %d duplicate share detected as HW error",
-		       cgpu->drv->name, cgpu->device_id);
-		return false;
-	}
-	cgpu->last_nonce = nonce;
 	return true;
 }
 
@@ -9910,6 +9936,12 @@ int main(int argc, char *argv[])
 
 	gwsched_thr_id = 0;
 
+#ifdef USE_AVALON7
+	if (opt_avalon7_ssplus_enable) {
+		ssp_sorter_init(HT_SIZE, HT_PRB_LMT, HT_PRB_C1, HT_PRB_C2);
+		ssp_hasher_init();
+	}
+#endif
 #ifdef USE_USBUTILS
 	usb_initialise();
 
@@ -10157,6 +10189,7 @@ begin_bench:
 
 		if (opt_work_update)
 			signal_work_update();
+
 		opt_work_update = false;
 
 		mutex_lock(stgd_lock);
