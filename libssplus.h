@@ -9,14 +9,11 @@
 #ifndef LIBSSPLUS_H
 #define LIBSSPLUS_H
 
-struct hasher_point {
-	uint32_t nonce2;
-	uint32_t tail;
-};
+typedef uint32_t ssp_pair[2];
 
-void sorter_init(void);
-int sorter_get_pair(uint32_t n2_pair[]);
-void hasher_init(void);
-void hasher_update_stratum(bool clean);
+void ssp_sorter_init(void);
+int ssp_sorter_get_pair(ssp_pair pair);
+void ssp_hasher_init(void);
+void ssp_hasher_update_stratum(bool clean);
 
 #endif /* LIBSSPLUS_H */

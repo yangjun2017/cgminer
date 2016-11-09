@@ -12,32 +12,38 @@
 
 #include "libssplus.h"
 
-void sorter_init(void)
+struct ssp_hasher_point {
+	uint32_t nonce2;
+	uint32_t tail;
+};
+
+static void ssp_sorter_insert(struct ssp_hasher_point *shp)
 {
 
 }
 
-static void sorter_insert(struct hasher_point *hp)
+void ssp_sorter_init(void)
 {
 
 }
 
-int sorter_get_pair(uint32_t n2[])
+int ssp_sorter_get_pair(ssp_pair pair)
 {
 	return 0;
 }
 
-void hasher_init(void)
+static void ssp_hasher_read_points(void)
 {
 
 }
 
-void hasher_update_stratum(bool clean)
+void ssp_hasher_init(void)
 {
 
 }
 
-static void hasher_read_points(void)
+void ssp_hasher_update_stratum(bool clean)
 {
 
 }
+

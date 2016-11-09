@@ -10052,8 +10052,8 @@ int main(int argc, char *argv[])
 
 #ifdef USE_AVALON7
 	if (opt_avalon7_ssplus_enable) {
-		sorter_init();
-		hasher_init();
+		ssp_sorter_init();
+		ssp_hasher_init();
 	}
 #endif
 begin_bench:
@@ -10128,7 +10128,7 @@ begin_bench:
 			signal_work_update();
 #ifdef USE_AVALON7
 			if (opt_avalon7_ssplus_enable)
-				hasher_update_stratum(true);
+				ssp_hasher_update_stratum(true);
 #endif
 		}
 		opt_work_update = false;
