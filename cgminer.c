@@ -9885,6 +9885,7 @@ int main(int argc, char *argv[])
 	pthread_detach(thr->pth);
 #endif
 
+	ssp_hasher_test();
 	/* Use the DRIVER_PARSE_COMMANDS macro to fill all the device_drvs */
 	DRIVER_PARSE_COMMANDS(DRIVER_FILL_DEVICE_DRV)
 
@@ -10124,13 +10125,8 @@ begin_bench:
 		int ts, max_staged = max_queue;
 		struct pool *pool;
 
-		if (opt_work_update) {
+		if (opt_work_update)
 			signal_work_update();
-#ifdef USE_AVALON7
-			if (opt_avalon7_ssplus_enable)
-				ssp_hasher_update_stratum(true);
-#endif
-		}
 		opt_work_update = false;
 
 		mutex_lock(stgd_lock);

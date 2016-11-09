@@ -14,6 +14,7 @@ typedef uint32_t ssp_pair[2];
 void ssp_sorter_init(void);
 int ssp_sorter_get_pair(ssp_pair pair);
 void ssp_hasher_init(void);
-void ssp_hasher_update_stratum(bool clean);
+void ssp_hasher_update_stratum(struct pool *pool, bool clean);
+void ssp_hasher_test(void);
 
 #endif /* LIBSSPLUS_H */
