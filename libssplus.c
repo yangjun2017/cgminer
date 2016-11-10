@@ -59,6 +59,7 @@ struct ssp_info {
 	volatile uint32_t *iram_addr;
 	volatile uint64_t *pram_addr;
 	uint32_t nonce2_init;
+	bool stratum_update;
 };
 
 static struct ssp_info sspinfo;
@@ -78,31 +79,51 @@ int ssp_sorter_get_pair(ssp_pair pair)
 	return 0;
 }
 
-static void ssp_hasher_read_points(void)
-{
-	uint32_t n = 10, i;
-	uint64_t *buf = (uint64_t *)malloc(n * sizeof *buf);
-
-	/* TODO: Add more check */
-	memcpy(buf, (void *)sspinfo.pram_addr, n * sizeof *buf);
-
-	applog(LOG_DEBUG, "(nonce2 -> tail)");
-	for (i = 0; i < n; i++)
-		applog(LOG_DEBUG, "(%08llx -> %08llx)", buf[i] & 0xffffffff, buf[i] >> 32);
-
-	free(buf);
-}
-
 static void *ssp_hasher_thread(void *userdata)
 {
+	uint32_t last_nonce2 = 0, point_index = 0;
+	bool valid_nonce2 = false;
+	struct ssp_info *p_ssp_info = (struct ssp_info *)userdata;
+
 	/* TODO: read points and fill to the sorter */
+	while (1) {
+		mutex_lock(&(sspinfo.hasher_lock));
+		if (p_ssp_info->stratum_update) {
+			p_ssp_info->stratum_update = false;
+			point_index = 0;
+			last_nonce2 = 0;
+			valid_nonce2 = false;
+			applog(LOG_DEBUG, "stratum update");
+
+			/* flush the sorter */
+		}
+
+		/* Note: hasher is fast enough, so the new job will start with a lower nonce2 */
+		if (last_nonce2 > (sspinfo.pram_addr[point_index] & 0xffffffff)) {
+			applog(LOG_DEBUG, "last nonce2 %08x, valid nonce2 %08llx", last_nonce2, (sspinfo.pram_addr[point_index] & 0xffffffff));
+			valid_nonce2 = true;
+		}
+
+		last_nonce2 = sspinfo.pram_addr[point_index] & 0xffffffff;
+		applog(LOG_DEBUG, "(%08llx -> %08llx)",
+				sspinfo.pram_addr[point_index] & 0xffffffff,
+				sspinfo.pram_addr[point_index] >> 32);
+
+		point_index = (point_index + 1) % (POINTS_RAM_SIZE / sizeof(struct ssp_hasher_point));
+		/* insert the sorter */
+		if (valid_nonce2)
+			ssp_sorter_insert((struct ssp_hasher_point *)&sspinfo.pram_addr[point_index]);
+
+		mutex_unlock(&(sspinfo.hasher_lock));
+	}
 	return NULL;
 }
 
 static inline void ssp_haser_fill_iram(struct ssp_hasher_instruction *p_inst, uint32_t inst_index)
 {
 	uint8_t i;
-	uint32_t *p_iram_addr, tmp;
+	volatile uint32_t *p_iram_addr;
+	uint32_t tmp;
 
 	p_iram_addr = sspinfo.iram_addr + inst_index * 32;
 	p_iram_addr[0] = p_inst->opcode;
@@ -151,13 +172,14 @@ void ssp_hasher_init(void)
 	}
 	close(memfd);
 
-	if (pthread_create(&(sspinfo.hasher_thr), NULL, ssp_hasher_thread, NULL)) {
+	if (pthread_create(&(sspinfo.hasher_thr), NULL, ssp_hasher_thread, &sspinfo)) {
 		applog(LOG_ERR, "libssplus create thread failed");
 		return;
 	}
 
 	sspinfo.iram_addr[31] = 1; /* hold reset */
 	sspinfo.nonce2_init = 0;
+	sspinfo.stratum_update = false;
 	mutex_init(&sspinfo.hasher_lock);
 }
 
@@ -263,6 +285,7 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 
 	/* start hasher */
 	sspinfo.iram_addr[31] = 0;
+	sspinfo.stratum_update = true;
 	mutex_unlock(&(sspinfo.hasher_lock));
 }
 
@@ -299,10 +322,13 @@ void ssp_hasher_test(void)
 	}
 	memcpy(test_pool.coinbase, coinbase, sizeof(coinbase));
 
+	ssp_sorter_init();
 	ssp_hasher_init();
-	ssp_hasher_update_stratum(&test_pool, true);
-	cgsleep_ms(2);
-	ssp_hasher_read_points();
+
+	for (i = 0; i < 2; i++) {
+		ssp_hasher_update_stratum(&test_pool, true);
+		cgsleep_ms(1);
+	}
 
 	free(test_pool.coinbase);
 	for (i = 0; i < test_pool.merkles; i++)
