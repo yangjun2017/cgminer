@@ -104,7 +104,7 @@ static inline void ssp_haser_fill_iram(struct ssp_hasher_instruction *p_inst, ui
 	uint8_t i;
 	uint32_t *p_iram_addr, tmp;
 
-	p_iram_addr = (uint32_t *)(((unsigned char *)sspinfo.iram_addr) + inst_index * sizeof(struct ssp_hasher_instruction));
+	p_iram_addr = sspinfo.iram_addr + inst_index * 32;
 	p_iram_addr[0] = p_inst->opcode;
 	applog(LOG_DEBUG, "iram[%d*32+0] = 0x%08x;", inst_index, p_inst->opcode);
 
@@ -114,7 +114,7 @@ static inline void ssp_haser_fill_iram(struct ssp_hasher_instruction *p_inst, ui
 			(p_inst->data[i * 4 + 2] << 8) |
 			(p_inst->data[i * 4 + 3]));
 		p_iram_addr[i + 1] = tmp;
-		applog(LOG_DEBUG, "iram[%d*32+%d] = 0x%08x-0x%08x;", inst_index, i + 1, tmp, p_iram_addr[i + 1]);
+		applog(LOG_DEBUG, "iram[%d*32+%d] = 0x%08x;", inst_index, i + 1, tmp);
 	}
 	p_iram_addr[i + 1] = 0x1; /* flush */
 	applog(LOG_DEBUG, "iram[%d*32+%d] = 1;", inst_index, i + 1);
@@ -301,7 +301,7 @@ void ssp_hasher_test(void)
 
 	ssp_hasher_init();
 	ssp_hasher_update_stratum(&test_pool, true);
-	cgsleep_ms(100);
+	cgsleep_ms(2);
 	ssp_hasher_read_points();
 
 	free(test_pool.coinbase);
