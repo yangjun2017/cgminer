@@ -54,7 +54,6 @@ struct ssp_hasher_instruction {
 struct ssp_point {
 	uint32_t nonce2;
 	uint32_t tail;
-
 	UT_hash_handle hh;
 };
 
@@ -76,7 +75,6 @@ static struct ssp_info sspinfo;
 static struct ssp_point *ssp_points = NULL;
 static struct ssp_pair_element *ssp_pair_head = NULL;
 
-
 static void ssp_sorter_insert(const struct ssp_point *point)
 {
 	struct ssp_point *tmp = NULL;
@@ -95,8 +93,10 @@ static void ssp_sorter_insert(const struct ssp_point *point)
 	pair->nonce2[0] = copy->nonce2;
 	pair->nonce2[1] = tmp->nonce2;
 	LL_APPEND(ssp_pair_head, pair);
+	HASH_DEL(ssp_points, tmp);
+	free(tmp);
 
-	applog(LOG_DEBUG, "Tail: %08llx, N2: %08llx--%08llx",
+	applog(LOG_DEBUG, "Tail: %08x, N2: %08x--%08x",
 	       copy->tail, copy->nonce2, tmp->nonce2);
 	return;
 }
@@ -114,11 +114,16 @@ void ssp_sorter_flush(void)
 		HASH_DEL(ssp_points, current);
 		free(current);
 	}
+
+	/* FIXME: free ssp_pair_head when the newblock found */
 }
 
 int ssp_sorter_get_pair(ssp_pair pair)
 {
 	struct ssp_pair_element *tmp;
+
+	if (!ssp_pair_head)
+		return 0;
 
 	pair[0] = ssp_pair_head->nonce2[0];
 	pair[1] = ssp_pair_head->nonce2[1];
@@ -127,7 +132,7 @@ int ssp_sorter_get_pair(ssp_pair pair)
 	ssp_pair_head = ssp_pair_head->next;
 	free(tmp);
 
-	return 0;
+	return 1;
 }
 
 static void *ssp_hasher_thread(void *userdata)
@@ -136,7 +141,6 @@ static void *ssp_hasher_thread(void *userdata)
 	bool valid_nonce2 = false;
 	struct ssp_info *p_ssp_info = (struct ssp_info *)userdata;
 
-	/* TODO: read points and fill to the sorter */
 	while (1) {
 		mutex_lock(&(sspinfo.hasher_lock));
 		if (!p_ssp_info->run)
@@ -147,8 +151,7 @@ static void *ssp_hasher_thread(void *userdata)
 			point_index = 0;
 			last_nonce2 = 0;
 			valid_nonce2 = false;
-
-			/* flush the sorter */
+			ssp_sorter_flush();
 			applog(LOG_DEBUG, "libssplus: stratum update");
 		}
 
@@ -164,7 +167,6 @@ static void *ssp_hasher_thread(void *userdata)
 				sspinfo.pram_addr[point_index] >> 32);
 
 		point_index = (point_index + 1) % (POINTS_RAM_SIZE / sizeof(struct ssp_point));
-		/* insert the sorter */
 		if (valid_nonce2)
 			ssp_sorter_insert((struct ssp_point *)&sspinfo.pram_addr[point_index]);
 
@@ -354,7 +356,10 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 void ssp_hasher_test(void)
 {
 	struct pool test_pool;
+	struct timeval t_start, t_find_pair;
+	ssp_pair pair;
 	int i;
+	double pair_diff;
 
 	unsigned char coinbase[] = {
 		0x01,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -395,6 +400,17 @@ void ssp_hasher_test(void)
 	for (i = 0; i < 2; i++) {
 		ssp_hasher_update_stratum(&test_pool, true);
 		cgsleep_ms(1);
+	}
+
+	cgtime(&t_start);
+	while (1) {
+		if (ssp_sorter_get_pair(pair)) {
+			cgtime(&t_find_pair);
+			pair_diff = tdiff(&t_find_pair, &t_start);
+			applog(LOG_DEBUG, "Got a pair %08x-%08x", pair[0], pair[1]);
+			applog(LOG_DEBUG, "time elapsed: %0.2fs", pair_diff);
+			break;
+		}
 	}
 
 	free(test_pool.coinbase);
