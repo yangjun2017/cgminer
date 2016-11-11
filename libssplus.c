@@ -141,14 +141,14 @@ static inline void ssp_haser_fill_iram(struct ssp_hasher_instruction *p_inst, ui
 	applog(LOG_DEBUG, "iram[%d*32+%d] = 1;", inst_index, i + 1);
 }
 
-void ssp_hasher_init(void)
+int ssp_hasher_init(void)
 {
 	int memfd;
 
 	memfd = open("/dev/mem", O_RDWR | O_SYNC);
 	if (memfd < 0) {
 		applog(LOG_ERR, "libssplus failed open /dev/mem");
-		return;
+		return 1;
 	}
 
 	sspinfo.iram_addr = (volatile uint32_t *)mmap(NULL, INSTRUCTIONS_RAM_SIZE,
@@ -158,7 +158,7 @@ void ssp_hasher_init(void)
 	if (sspinfo.iram_addr == MAP_FAILED) {
 		close(memfd);
 		applog(LOG_ERR, "libssplus mmap instructions ram failed");
-		return;
+		return 1;
 	}
 
 	sspinfo.pram_addr = (volatile uint64_t *)mmap(NULL, POINTS_RAM_SIZE,
@@ -168,19 +168,21 @@ void ssp_hasher_init(void)
 	if (sspinfo.pram_addr == MAP_FAILED) {
 		close(memfd);
 		applog(LOG_ERR, "libssplus mmap points ram failed");
-		return;
+		return 1;
 	}
 	close(memfd);
 
 	if (pthread_create(&(sspinfo.hasher_thr), NULL, ssp_hasher_thread, &sspinfo)) {
 		applog(LOG_ERR, "libssplus create thread failed");
-		return;
+		return 1;
 	}
 
 	sspinfo.iram_addr[31] = 1; /* hold reset */
 	sspinfo.nonce2_init = 0;
 	sspinfo.stratum_update = false;
 	mutex_init(&sspinfo.hasher_lock);
+
+	return 0
 }
 
 static inline void sha256_prehash(const unsigned char *message, unsigned int len, unsigned char *digest)
