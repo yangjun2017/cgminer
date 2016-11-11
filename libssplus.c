@@ -58,7 +58,6 @@ struct ssp_info {
 	pthread_mutex_t hasher_lock;
 	volatile uint32_t *iram_addr;
 	volatile uint64_t *pram_addr;
-	uint32_t nonce2_init;
 	bool stratum_update;
 };
 
@@ -178,11 +177,10 @@ int ssp_hasher_init(void)
 	}
 
 	sspinfo.iram_addr[31] = 1; /* hold reset */
-	sspinfo.nonce2_init = 0;
 	sspinfo.stratum_update = false;
 	mutex_init(&sspinfo.hasher_lock);
 
-	return 0
+	return 0;
 }
 
 static inline void sha256_prehash(const unsigned char *message, unsigned int len, unsigned char *digest)
@@ -202,22 +200,20 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 	struct ssp_hasher_instruction inst;
 	int coinbase_len_posthash, coinbase_len_prehash;
 	int i, a, b;
-	uint32_t inst_index = 0;
+	uint32_t inst_index = 0, nonce2_init = 0;
 
 	mutex_lock(&(sspinfo.hasher_lock));
 
 	/* stop hasher */
 	sspinfo.iram_addr[31] = 1; /* hold reset */
-	if (clean)
-		sspinfo.nonce2_init = 0;
 
 	/* hasher init */
 	inst.opcode = 0;
 	memset(inst.data, 0, 64);
-	inst.data[28] = (sspinfo.nonce2_init >> 24) & 0xff;
-	inst.data[29] = (sspinfo.nonce2_init >> 16) & 0xff;
-	inst.data[30] = (sspinfo.nonce2_init >> 8) & 0xff;
-	inst.data[31] = (sspinfo.nonce2_init) & 0xff;
+	inst.data[28] = (nonce2_init >> 24) & 0xff;
+	inst.data[29] = (nonce2_init >> 16) & 0xff;
+	inst.data[30] = (nonce2_init >> 8) & 0xff;
+	inst.data[31] = (nonce2_init) & 0xff;
 
 	coinbase_len_prehash = pool->nonce2_offset - (pool->nonce2_offset % SHA256_BLOCK_SIZE);
 	sha256_prehash(pool->coinbase, coinbase_len_prehash, inst.data + 32);
