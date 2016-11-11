@@ -14,6 +14,7 @@
 #include "driver-avalon7.h"
 #include "crc.h"
 #include "sha2.h"
+#include "libssplus.h"
 #include "hexdump.c"
 
 #define get_fan_pwm(v)	(AVA7_PWM_MAX - (v) * AVA7_PWM_MAX / 100)
@@ -1277,6 +1278,49 @@ static inline void avalon7_detect(bool __maybe_unused hotplug)
 		avalon7_iic_detect();
 }
 
+static void *avalon7_ssp_fill_pairs(void *userdata)
+{
+	char threadname[16];
+
+	struct cgpu_info *avalon7 = userdata;
+	struct avalon7_info *info = avalon7->device_data;
+	struct avalon7_pkg send_pkg;
+	ssp_pair pair;
+	uint8_t pair_counts;
+	int i;
+	uint32_t tmp;
+
+	snprintf(threadname, sizeof(threadname), "%d/Av7ssp", avalon7->device_id);
+	RenameThread(threadname);
+
+	while (likely(!avalon7->shutdown)) {
+		for (i = 1; i < AVA7_DEFAULT_MODULARS; i++) {
+			if (info->enable[i])
+				continue;
+
+			pair_counts = 0;
+			memset(send_pkg.data, 0, AVA7_P_DATA_LEN);
+			while (pair_counts < 4) {
+				if (!ssp_sorter_get_pair(pair)) {
+					applog(LOG_DEBUG, "%s-%d: Waiting for pairs from ssp_sorter_get_pair",
+							avalon7->drv->name, avalon7->device_id);
+					continue;
+				}
+				tmp = be32toh(pair[0]);
+				memcpy(send_pkg.data + pair_counts * 8, &tmp, 4);
+				tmp = be32toh(pair[1]);
+				memcpy(send_pkg.data + pair_counts * 8 + 4, &tmp, 4);
+				pair_counts++;
+			}
+
+			avalon7_init_pkg(&send_pkg, AVA7_P_PAIRS, 1, 1);
+			avalon7_iic_xfer_pkg(avalon7, i, &send_pkg, NULL);
+		}
+	}
+
+	return NULL;
+}
+
 static bool avalon7_prepare(struct thr_info *thr)
 {
 	struct cgpu_info *avalon7 = thr->cgpu;
@@ -1300,6 +1344,13 @@ static bool avalon7_prepare(struct thr_info *thr)
 	cglock_init(&info->pool0.data_lock);
 	cglock_init(&info->pool1.data_lock);
 	cglock_init(&info->pool2.data_lock);
+
+	if (opt_avalon7_ssplus_enable) {
+		if (pthread_create(&(info->ssp_thr), NULL, avalon7_ssp_fill_pairs, &avalon7)) {
+			applog(LOG_ERR, "%s-%d: create ssp thread failed", avalon7->drv->name, avalon7->device_id);
+			return false;
+		}
+	}
 
 	return true;
 }
