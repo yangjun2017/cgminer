@@ -83,7 +83,8 @@ static void ssp_sorter_insert(const struct ssp_point *point)
 		return;
 	}
 
-	/* print those two points then insert a pair to list */
+	applog(LOG_DEBUG, "Tail: %08llx, N2: %08llx--%08llx",
+	       copy->tail, copy->nonce2, tmp->nonce2);
 	return;
 }
 

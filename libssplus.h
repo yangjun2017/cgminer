@@ -16,6 +16,7 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean);
 void ssp_hasher_test(void);
 
 void ssp_sorter_init(void);
+void ssp_sorter_flush(void);
 int  ssp_sorter_get_pair(ssp_pair pair);
 
 #endif /* LIBSSPLUS_H */
