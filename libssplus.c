@@ -93,11 +93,11 @@ static void ssp_sorter_insert(const struct ssp_point *point)
 	pair->nonce2[0] = copy->nonce2;
 	pair->nonce2[1] = tmp->nonce2;
 	LL_APPEND(ssp_pair_head, pair);
+	applog(LOG_NOTICE, "Tail: %08x, N2: %08x--%08x",
+	       copy->tail, copy->nonce2, tmp->nonce2);
+
 	HASH_DEL(ssp_points, tmp);
 	free(tmp);
-
-	applog(LOG_DEBUG, "Tail: %08x, N2: %08x--%08x",
-	       copy->tail, copy->nonce2, tmp->nonce2);
 	return;
 }
 
@@ -407,9 +407,8 @@ void ssp_hasher_test(void)
 		if (ssp_sorter_get_pair(pair)) {
 			cgtime(&t_find_pair);
 			pair_diff = tdiff(&t_find_pair, &t_start);
-			applog(LOG_DEBUG, "Got a pair %08x-%08x", pair[0], pair[1]);
-			applog(LOG_DEBUG, "time elapsed: %0.2fs", pair_diff);
-			break;
+			applog(LOG_NOTICE, "%0.4fs\tGot a pair %08x-%08x", pair_diff, pair[0], pair[1]);
+			memcpy(&t_start, &t_find_pair, sizeof(t_find_pair));
 		}
 	}
 
