@@ -17,6 +17,7 @@
 #include <sys/mman.h>
 
 #include "uthash.h"
+#include "utlist.h"
 #include "sha2.h"
 
 #include "libssplus.h"
@@ -66,8 +67,15 @@ struct ssp_info {
 	bool run;
 };
 
+struct ssp_pair_element {
+	uint32_t nonce2[2];
+	struct ssp_pair_element *next;
+};
+
 static struct ssp_info sspinfo;
-static struct ssp_point *ssp_points;
+static struct ssp_point *ssp_points = NULL;
+static struct ssp_pair_element *ssp_pair_head = NULL;
+
 
 static void ssp_sorter_insert(const struct ssp_point *point)
 {
@@ -82,6 +90,11 @@ static void ssp_sorter_insert(const struct ssp_point *point)
 		HASH_ADD_INT(ssp_points, tail, copy);
 		return;
 	}
+
+	struct ssp_pair_element *pair = cgmalloc(sizeof(struct ssp_pair_element));
+	pair->nonce2[0] = copy->nonce2;
+	pair->nonce2[1] = tmp->nonce2;
+	LL_APPEND(ssp_pair_head, pair);
 
 	applog(LOG_DEBUG, "Tail: %08llx, N2: %08llx--%08llx",
 	       copy->tail, copy->nonce2, tmp->nonce2);
@@ -105,6 +118,15 @@ void ssp_sorter_flush(void)
 
 int ssp_sorter_get_pair(ssp_pair pair)
 {
+	struct ssp_pair_element *tmp;
+
+	pair[0] = ssp_pair_head->nonce2[0];
+	pair[1] = ssp_pair_head->nonce2[1];
+
+	tmp = ssp_pair_head;
+	ssp_pair_head = ssp_pair_head->next;
+	free(tmp);
+
 	return 0;
 }
 
