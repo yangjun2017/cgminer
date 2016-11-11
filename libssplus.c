@@ -59,11 +59,12 @@ struct ssp_info {
 	volatile uint32_t *iram_addr;
 	volatile uint64_t *pram_addr;
 	bool stratum_update;
+	bool run;
 };
 
 static struct ssp_info sspinfo;
 
-static void ssp_sorter_insert(struct ssp_hasher_point *shp)
+static void ssp_sorter_insert(const struct ssp_hasher_point *shp)
 {
 
 }
@@ -87,19 +88,22 @@ static void *ssp_hasher_thread(void *userdata)
 	/* TODO: read points and fill to the sorter */
 	while (1) {
 		mutex_lock(&(sspinfo.hasher_lock));
+		if (!p_ssp_info->run)
+			valid_nonce2 = false;
+
 		if (p_ssp_info->stratum_update) {
 			p_ssp_info->stratum_update = false;
 			point_index = 0;
 			last_nonce2 = 0;
 			valid_nonce2 = false;
-			applog(LOG_DEBUG, "stratum update");
 
 			/* flush the sorter */
+			applog(LOG_DEBUG, "libssplus: stratum update");
 		}
 
 		/* Note: hasher is fast enough, so the new job will start with a lower nonce2 */
 		if (last_nonce2 > (sspinfo.pram_addr[point_index] & 0xffffffff)) {
-			applog(LOG_DEBUG, "last nonce2 %08x, valid nonce2 %08llx", last_nonce2, (sspinfo.pram_addr[point_index] & 0xffffffff));
+			applog(LOG_DEBUG, "libssplus: last nonce2 %08x, valid nonce2 %08llx", last_nonce2, (sspinfo.pram_addr[point_index] & 0xffffffff));
 			valid_nonce2 = true;
 		}
 
@@ -140,13 +144,25 @@ static inline void ssp_haser_fill_iram(struct ssp_hasher_instruction *p_inst, ui
 	applog(LOG_DEBUG, "iram[%d*32+%d] = 1;", inst_index, i + 1);
 }
 
+static inline void ssp_hasher_stop(void)
+{
+	sspinfo.iram_addr[31] = 1;
+	sspinfo.run = false;
+}
+
+static inline void ssp_hasher_start(void)
+{
+	sspinfo.iram_addr[31] = 0;
+	sspinfo.run = true;
+}
+
 int ssp_hasher_init(void)
 {
 	int memfd;
 
 	memfd = open("/dev/mem", O_RDWR | O_SYNC);
 	if (memfd < 0) {
-		applog(LOG_ERR, "libssplus failed open /dev/mem");
+		applog(LOG_ERR, "libssplus: failed open /dev/mem");
 		return 1;
 	}
 
@@ -156,7 +172,7 @@ int ssp_hasher_init(void)
 						INSTRUCTIONS_RAM_START);
 	if (sspinfo.iram_addr == MAP_FAILED) {
 		close(memfd);
-		applog(LOG_ERR, "libssplus mmap instructions ram failed");
+		applog(LOG_ERR, "libssplus: mmap instructions ram failed");
 		return 1;
 	}
 
@@ -166,18 +182,18 @@ int ssp_hasher_init(void)
 						POINTS_RAM_START);
 	if (sspinfo.pram_addr == MAP_FAILED) {
 		close(memfd);
-		applog(LOG_ERR, "libssplus mmap points ram failed");
+		applog(LOG_ERR, "libssplus: mmap points ram failed");
 		return 1;
 	}
 	close(memfd);
 
 	if (pthread_create(&(sspinfo.hasher_thr), NULL, ssp_hasher_thread, &sspinfo)) {
-		applog(LOG_ERR, "libssplus create thread failed");
+		applog(LOG_ERR, "libssplus: create thread failed");
 		return 1;
 	}
 
-	sspinfo.iram_addr[31] = 1; /* hold reset */
 	sspinfo.stratum_update = false;
+	ssp_hasher_stop();
 	mutex_init(&sspinfo.hasher_lock);
 
 	return 0;
@@ -204,10 +220,8 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 
 	mutex_lock(&(sspinfo.hasher_lock));
 
-	/* stop hasher */
-	sspinfo.iram_addr[31] = 1; /* hold reset */
-
-	/* hasher init */
+	ssp_hasher_stop();
+	/* instruction init */
 	inst.opcode = 0;
 	memset(inst.data, 0, 64);
 	inst.data[28] = (nonce2_init >> 24) & 0xff;
@@ -281,9 +295,8 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 	inst.opcode = INST_DONE;
 	ssp_haser_fill_iram(&inst, inst_index);
 
-	/* start hasher */
-	sspinfo.iram_addr[31] = 0;
 	sspinfo.stratum_update = true;
+	ssp_hasher_start();
 	mutex_unlock(&(sspinfo.hasher_lock));
 }
 
