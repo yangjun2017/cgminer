@@ -272,7 +272,6 @@ struct avalon7_info {
 	uint64_t diff1[AVA7_DEFAULT_MODULARS];
 
 	uint16_t vout_adc_ratio[AVA7_DEFAULT_MODULARS];
-
 	bool conn_overloaded;
 };
 
