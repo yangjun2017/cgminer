@@ -93,7 +93,7 @@ static void ssp_sorter_insert(const struct ssp_point *point)
 	pair->nonce2[0] = copy->nonce2;
 	pair->nonce2[1] = tmp->nonce2;
 	LL_APPEND(ssp_pair_head, pair);
-	applog(LOG_NOTICE, "Tail: %08x, N2: %08x--%08x",
+	applog(LOG_DEBUG, "Tail: %08x, N2: %08x--%08x",
 	       copy->tail, copy->nonce2, tmp->nonce2);
 
 	HASH_DEL(ssp_points, tmp);

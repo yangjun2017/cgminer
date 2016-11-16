@@ -1452,7 +1452,7 @@ static struct opt_table opt_config_table[] = {
 		     opt_set_invbool, &opt_avalon7_asic_debug,
 		     "Disable A3212 debug."),
 	OPT_WITHOUT_ARG("--avalon7-ssplus-enable",
-		     opt_set_invbool, &opt_avalon7_ssplus_enable,
+		     opt_set_bool, &opt_avalon7_ssplus_enable,
 		     "Enable avalon7 smart speed plus."),
 #endif
 #ifdef USE_AVALON_MINER
@@ -9885,7 +9885,6 @@ int main(int argc, char *argv[])
 	pthread_detach(thr->pth);
 #endif
 
-	ssp_hasher_test();
 	/* Use the DRIVER_PARSE_COMMANDS macro to fill all the device_drvs */
 	DRIVER_PARSE_COMMANDS(DRIVER_FILL_DEVICE_DRV)
 
@@ -10125,8 +10124,14 @@ begin_bench:
 		int ts, max_staged = max_queue;
 		struct pool *pool;
 
-		if (opt_work_update)
+		if (opt_work_update) {
 			signal_work_update();
+			if (opt_avalon7_ssplus_enable) {
+				pool = current_pool();
+				if (pool->has_stratum)
+					ssp_hasher_update_stratum(pool, true);
+			}
+		}
 		opt_work_update = false;
 
 		mutex_lock(stgd_lock);

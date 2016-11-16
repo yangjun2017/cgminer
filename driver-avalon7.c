@@ -1293,9 +1293,10 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 	snprintf(threadname, sizeof(threadname), "%d/Av7ssp", avalon7->device_id);
 	RenameThread(threadname);
 
+	cgsleep_ms(3000);
 	while (likely(!avalon7->shutdown)) {
 		for (i = 1; i < AVA7_DEFAULT_MODULARS; i++) {
-			if (info->enable[i])
+			if (!info->enable[i])
 				continue;
 
 			pair_counts = 0;
@@ -1346,7 +1347,7 @@ static bool avalon7_prepare(struct thr_info *thr)
 	cglock_init(&info->pool2.data_lock);
 
 	if (opt_avalon7_ssplus_enable) {
-		if (pthread_create(&(info->ssp_thr), NULL, avalon7_ssp_fill_pairs, &avalon7)) {
+		if (pthread_create(&(info->ssp_thr), NULL, avalon7_ssp_fill_pairs, (void *)avalon7)) {
 			applog(LOG_ERR, "%s-%d: create ssp thread failed", avalon7->drv->name, avalon7->device_id);
 			return false;
 		}
@@ -1638,17 +1639,22 @@ static void avalon7_init_setting(struct cgpu_info *avalon7, int addr)
 
 	memset(send_pkg.data, 0, AVA7_P_DATA_LEN);
 
-	/* TODO:ss/ssp mode */
-
 	tmp = be32toh(opt_avalon7_freq_sel);
 	memcpy(send_pkg.data + 4, &tmp, 4);
 
-	/* adjust flag [0-5]: reserved, 6: nonce check, 7: autof*/
+	/*
+	 * set flags:
+	 * 0: ss switch
+	 * 1: nonce check
+	 * 2: asic debug
+	 * 3: ssp switch
+	 */
 	tmp = 1;
 	if (!opt_avalon7_smart_speed)
 	      tmp = 0;
 	tmp |= (1 << 1); /* Enable nonce check */
 	tmp |= (opt_avalon7_asic_debug << 2);
+	tmp |= (opt_avalon7_ssplus_enable << 3);
 	send_pkg.data[8] = tmp & 0xff;
 	send_pkg.data[9] = opt_avalon7_nonce_mask & 0xff;
 
