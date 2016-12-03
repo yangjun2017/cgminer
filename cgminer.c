@@ -323,6 +323,8 @@ bool opt_usb_list_all;
 cgsem_t usb_resource_sem;
 static pthread_t usb_poll_thread;
 static bool usb_polling;
+static bool polling_usb;
+static bool usb_reinit;
 #endif
 
 char *opt_kernel_path;
@@ -850,10 +852,12 @@ static char *set_int_0_to_7680(const char *arg, int *i)
         return set_int_range(arg, i, 0, 7680);
 }
 
+#if defined(USE_AVALON4) || defined(USE_AVALON7)
 static char *set_int_1_to_60(const char *arg, int *i)
 {
         return set_int_range(arg, i, 1, 60);
 }
+#endif
 
 static char *set_int_0_to_200(const char *arg, int *i)
 {
@@ -7175,6 +7179,8 @@ bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *r
 	}
 
 	work->pool = real_pool;
+	/* Inherit the sdiff from the original stratum */
+	work->sdiff = pool->sdiff;
 
 	work->thr_id = thr_id;
 	work->work_block = work_block;
@@ -9555,6 +9561,23 @@ static void hotplug_process(void)
 
 #define DRIVER_DRV_DETECT_HOTPLUG(X) X##_drv.drv_detect(true);
 
+static void reinit_usb(void)
+{
+	int err;
+
+	usb_reinit = true;
+	/* Wait till libusb_poll_thread is no longer polling */
+	while (polling_usb)
+		cgsleep_ms(100);
+
+	applog(LOG_DEBUG, "Reinitialising libusb");
+	libusb_exit(NULL);
+	err = libusb_init(NULL);
+	if (err)
+		quit(1, "Reinit of libusb failed err %d:%s", err, libusb_error_name(err));
+	usb_reinit = false;
+}
+
 static void *hotplug_thread(void __maybe_unused *userdata)
 {
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
@@ -9580,6 +9603,11 @@ static void *hotplug_thread(void __maybe_unused *userdata)
 
 			if (new_devices)
 				hotplug_process();
+
+			/* If we have no active devices, libusb may need to
+			 * be re-initialised to work properly */
+			if (total_devices == zombie_devs)
+				reinit_usb();
 
 			// hotplug_time >0 && <=9999
 			cgsleep_ms(hotplug_time * 1000);
@@ -9608,20 +9636,29 @@ static void probe_pools(void)
 #ifdef USE_USBUTILS
 static void *libusb_poll_thread(void __maybe_unused *arg)
 {
-	struct timeval tv_end = {0, 100000};
+	struct timeval tv_end;
 
 	RenameThread("USBPoll");
 
-	while (likely(usb_polling))
+	while (likely(usb_polling)) {
+		tv_end.tv_sec = 0;
+		tv_end.tv_usec = 100000;
+		while (usb_reinit) {
+			polling_usb = false;
+			cgsleep_ms(100);
+		}
+		polling_usb = true;
 		libusb_handle_events_timeout_completed(NULL, &tv_end, NULL);
+	}
 
 	/* Cancel any cancellable usb transfers */
 	cancel_usb_transfers();
 
 	/* Keep event handling going until there are no async transfers in
 	 * flight. */
-	tv_end.tv_sec = 0;
 	while (async_usb_transfers()) {
+		tv_end.tv_sec = 0;
+		tv_end.tv_usec = 0;
 		libusb_handle_events_timeout_completed(NULL, &tv_end, NULL);
 	};
 

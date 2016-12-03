@@ -1,5 +1,6 @@
 /*
  * Copyright 2016 Mikeqin <Fengling.Qin@gmail.com>
+ * Copyright 2016 Con Kolivas <kernel@kolivas.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -393,24 +394,63 @@ static inline int get_temp_max(struct avalon7_info *info, int addr)
 	return max;
 }
 
+/* Use a PID-like feedback mechanism for optimal temperature and fan speed */
 static inline uint32_t adjust_fan(struct avalon7_info *info, int id)
 {
+	int t, tdiff, delta;
 	uint32_t pwm;
-	int t, diff, fandiff = opt_avalon7_fan_max - opt_avalon7_fan_min;;
+	time_t now_t;
 
-	/* Scale fan% non linearly relatively to target temperature. It will
-	 * not try to keep the temperature at temp_target that accurately but
-	 * avoids temperature overshoot in both directions. */
+	now_t = time(NULL);
 	t = get_temp_max(info, id);
-	diff = t - opt_avalon7_temp_target + 30;
-	if (diff > 32)
-		diff = 32;
-	else if (diff < 0)
-		diff = 0;
-	diff *= diff;
-	fandiff = fandiff * diff / 1024;
-	info->fan_pct[id] = opt_avalon7_fan_min + fandiff;
+	tdiff = t - info->temp_last_max[id];
+	if (!tdiff && now_t < info->last_temp_time[id] + AVA7_DEFAULT_FAN_INTERVAL)
+		goto out;
+	info->last_temp_time[id] = now_t;
+	delta = t - info->temp_target[id];
 
+	/* Check for init value and ignore it */
+	if (unlikely(info->temp_last_max[id] == -273))
+		tdiff = 0;
+	info->temp_last_max[id] = t;
+
+	if (t >= info->temp_overheat[id]) {
+		/* Hit the overheat temperature limit */
+		if (info->fan_pct[id] < opt_avalon7_fan_max) {
+			applog(LOG_WARNING, "Overheat detected on AV7-%d, increasing fan to max", id);
+			info->fan_pct[id] = opt_avalon7_fan_max;
+		}
+	} else if (delta > 0) {
+		/* Over target temperature. */
+
+		/* Is the temp already coming down */
+		if (tdiff < 0)
+			goto out;
+		/* Adjust fanspeed by temperature over and any further rise */
+		info->fan_pct[id] += delta + tdiff;
+	} else {
+		/* Below target temperature */
+		int diff = tdiff;
+
+		if (tdiff > 0) {
+			int divisor = -delta / AVA7_DEFAULT_TEMP_HYSTERESIS + 1;
+
+			/* Adjust fanspeed by temperature change proportional to
+			 * diff from optimal. */
+			diff /= divisor;
+		} else {
+			/* Is the temp below optimal and unchanging, gently lower speed */
+			if (t < info->temp_target[id] - AVA7_DEFAULT_TEMP_HYSTERESIS && !tdiff)
+				diff -= 1;
+		}
+		info->fan_pct[id] += diff;
+	}
+
+	if (info->fan_pct[id] > opt_avalon7_fan_max)
+		info->fan_pct[id] = opt_avalon7_fan_max;
+	else if (info->fan_pct[id] < opt_avalon7_fan_min)
+		info->fan_pct[id] = opt_avalon7_fan_min;
+out:
 	pwm = get_fan_pwm(info->fan_pct[id]);
 	if (info->freq_mode[id] == AVA7_FREQ_TEMPADJ_MODE)
 		pwm = get_fan_pwm(opt_avalon7_fan_max);
@@ -1211,7 +1251,9 @@ static bool avalon7_prepare(struct thr_info *thr)
 	struct cgpu_info *avalon7 = thr->cgpu;
 	struct avalon7_info *info = avalon7->device_data;
 
-	info->newnonce = 0;
+	info->last_diff1 = 0;
+	info->pending_diff1 = 0;
+	info->last_rej = 0;
 	info->mm_count = 0;
 	info->xfer_err_cnt = 0;
 	info->pool_no = 0;
@@ -1328,7 +1370,7 @@ static void detect_modules(struct cgpu_info *avalon7)
 
 		info->temp_overheat[i] = AVA7_DEFAULT_TEMP_OVERHEAT;
 		info->temp_target[i] = opt_avalon7_temp_target;
-		info->fan_pct[i] = opt_avalon7_fan_min;
+		info->fan_pct[i] = opt_avalon7_fan_min + (opt_avalon7_fan_min + opt_avalon7_fan_max) / 3;
 		for (j = 0; j < info->miner_count[i]; j++) {
 			info->set_voltage[i][j] = opt_avalon7_voltage;
 			info->get_voltage[i][j] = 0;
@@ -1766,9 +1808,10 @@ static int64_t avalon7_scanhash(struct thr_info *thr)
 	struct cgpu_info *avalon7 = thr->cgpu;
 	struct avalon7_info *info = avalon7->device_data;
 	struct timeval current;
-	double device_tdiff, h;
 	int i, j, k, count = 0;
+	double device_tdiff;
 	int temp_max;
+	int64_t ret;
 	bool update_settings = false;
 	bool freq_dec_check = false;
 	bool freq_adj_check = false;
@@ -1929,15 +1972,26 @@ static int64_t avalon7_scanhash(struct thr_info *thr)
 	}
 	info->mm_count = count;
 
-	/* Step 6: Calculate hashes */
-	h = avalon7->diff_accepted - info->newnonce;
-	info->newnonce = avalon7->diff_accepted;
-	if (h && !info->firsthash.tv_sec) {
+	/* Step 6: Calculate hashes. Use the diff1 value which is scaled by
+	 * device diff and is usually lower than pool diff which will give a
+	 * more stable result, but remove diff rejected shares to more closely
+	 * approximate diff accepted values. */
+	info->pending_diff1 += avalon7->diff1 - info->last_diff1;
+	info->last_diff1 = avalon7->diff1;
+	info->pending_diff1 -= avalon7->diff_rejected - info->last_rej;
+	info->last_rej = avalon7->diff_rejected;
+	if (info->pending_diff1 && !info->firsthash.tv_sec) {
 		cgtime(&info->firsthash);
 		copy_time(&(avalon7->dev_start_tv), &(info->firsthash));
 	}
 
-	return (int64_t)(h * 0xffffffffull);
+	if (info->pending_diff1 <= 0)
+		ret = 0;
+	else {
+		ret = info->pending_diff1;
+		info->pending_diff1 = 0;
+	}
+	return ret * 0xffffffffull;
 }
 
 static float avalon7_hash_cal(struct cgpu_info *avalon7, int modular_id)

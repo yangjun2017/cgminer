@@ -1,5 +1,6 @@
 /*
  * Copyright 2016 Mikeqin <Fengling.Qin@gmail.com>
+ * Copyright 2016 Con Kolivas <kernel@kolivas.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -22,11 +23,13 @@
 #define AVA7_MM721_ASIC_CNT		18
 #define AVA7_MM741_ASIC_CNT		22
 
-#define AVA7_DEFAULT_FAN_MIN	0 /* % */
-#define AVA7_DEFAULT_FAN_MAX	100
+#define AVA7_DEFAULT_FAN_MIN		5 /* % */
+#define AVA7_DEFAULT_FAN_MAX		100
+#define AVA7_DEFAULT_FAN_INTERVAL	15 /* Seconds */
 
-#define AVA7_DEFAULT_TEMP_TARGET	99
+#define AVA7_DEFAULT_TEMP_TARGET	90
 #define AVA7_DEFAULT_TEMP_OVERHEAT	105
+#define AVA7_DEFAULT_TEMP_HYSTERESIS	5
 
 #define AVA7_DEFAULT_VOLTAGE_MIN	3889
 #define AVA7_DEFAULT_VOLTAGE	4981
@@ -59,7 +62,7 @@
 #define AVA7_DEFAULT_TH_INIT	(0xffff / 2)
 #define AVA7_DEFAULT_TH_MS	1
 #define AVA7_DEFAULT_TH_TIMEOUT	0
-#define AVA7_DEFAULT_NONCE_MASK 29
+#define AVA7_DEFAULT_NONCE_MASK 27
 
 #define AVA7_DEFAULT_IIC_DETECT	false
 
@@ -181,7 +184,9 @@ struct avalon7_pkg {
 
 struct avalon7_info {
 	/* Public data */
-	double newnonce;
+	int64_t last_diff1;
+	int64_t pending_diff1;
+	double last_rej;
 
 	int mm_count;
 	int xfer_err_cnt;
@@ -242,6 +247,7 @@ struct avalon7_info {
 	int temp_target[AVA7_DEFAULT_MODULARS];
 	int temp_last_max[AVA7_DEFAULT_MODULARS];
 	int temp_overheat[AVA7_DEFAULT_MODULARS];
+	time_t last_temp_time[AVA7_DEFAULT_MODULARS];
 
 	uint32_t set_voltage[AVA7_DEFAULT_MODULARS][AVA7_DEFAULT_MINER_CNT];
 	uint32_t set_frequency[AVA7_DEFAULT_MODULARS][AVA7_DEFAULT_MINER_CNT][AVA7_DEFAULT_PLL_CNT];
