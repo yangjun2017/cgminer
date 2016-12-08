@@ -9,13 +9,18 @@
 #ifndef LIBSSPLUS_H
 #define LIBSSPLUS_H
 
+#define HT_SIZE (1 << 26)
+#define HT_PRB_LMT 4
+#define HT_PRB_C1 1
+#define HT_PRB_C2 1
+
 typedef uint32_t ssp_pair[2];
 
 int  ssp_hasher_init(void);
 void ssp_hasher_update_stratum(struct pool *pool, bool clean);
 void ssp_hasher_test(void);
 
-void ssp_sorter_init(void);
+void ssp_sorter_init(uint32_t max_size, uint32_t limit, uint32_t c1, uint32_t c2);
 void ssp_sorter_flush(void);
 int  ssp_sorter_get_pair(ssp_pair pair);
 

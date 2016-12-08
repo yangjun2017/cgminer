@@ -16,7 +16,6 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-#include "uthash.h"
 #include "utlist.h"
 #include "sha2.h"
 
@@ -46,6 +45,8 @@
 	*((str) + 0) = (uint8_t) ((x) >> 24);	\
 }
 
+#define SORTER_DEBUG
+
 struct ssp_hasher_instruction {
 	uint32_t opcode;
 	uint8_t data[64];
@@ -54,7 +55,11 @@ struct ssp_hasher_instruction {
 struct ssp_point {
 	uint32_t nonce2;
 	uint32_t tail;
-	UT_hash_handle hh;
+};
+
+struct ssp_ht_cell {
+	uint32_t stratum;
+	struct ssp_point point;
 };
 
 struct ssp_info {
@@ -71,49 +76,126 @@ struct ssp_pair_element {
 	struct ssp_pair_element *next;
 };
 
+struct ssp_hashtable {
+	struct ssp_ht_cell *cells;
+	uint32_t size;
+	uint32_t max_size;  /* must be powers of 2 */
+	uint32_t limit;  /* probing limit */
+	uint32_t c1;
+	uint32_t c2;
+	uint32_t stratum;
+};
+
 static struct ssp_info sspinfo;
-static struct ssp_point *ssp_points = NULL;
+static struct ssp_hashtable *ssp_ht = NULL;
 static struct ssp_pair_element *ssp_pair_head = NULL;
+
+#ifdef SORTER_DEBUG
+static uint32_t pair_count = 0;
+static uint32_t discarded = 0;
+static uint32_t calls = 0;
+static struct timeval ssp_ti, ssp_tf;
+static double insert_time = .0;
+#endif
 
 static void ssp_sorter_insert(const struct ssp_point *point)
 {
-	struct ssp_point *tmp = NULL;
-	struct ssp_point *copy = cgmalloc(sizeof(struct ssp_point));
+	int i;
+	uint32_t key;
 
-	copy->nonce2 = point->nonce2;
-	copy->tail = point->tail;
+	#ifdef SORTER_DEBUG
+	struct timeval ti, tf;
 
-	HASH_FIND_INT(ssp_points, &copy->tail, tmp);
-	if (!tmp) {
-		HASH_ADD_INT(ssp_points, tail, copy);
-		return;
+	if (calls == 0xffffffff)
+		applog(LOG_NOTICE, "calls overflow");
+	calls++;
+	cgtime(&ti);
+	#endif
+
+	for (i = 0; i < ssp_ht->limit; i++) {
+		key = (point->tail + ssp_ht->c1 * i + ssp_ht->c2 * i * i) %
+			(ssp_ht->max_size);
+		if (ssp_ht->stratum != ssp_ht->cells[key].stratum) {
+			/* insert */
+			ssp_ht->cells[key].stratum = ssp_ht->stratum;
+			ssp_ht->cells[key].point.tail = point->tail;
+			ssp_ht->cells[key].point.nonce2 = point->nonce2;
+			ssp_ht->size++;
+			goto out;
+		} else if (ssp_ht->cells[key].point.tail == point->tail) {
+			/* get a collision */
+			struct ssp_pair_element *pair = cgmalloc(sizeof(struct ssp_pair_element));
+			pair->nonce2[0] = point->nonce2;
+			pair->nonce2[1] = ssp_ht->cells[key].point.nonce2;
+			LL_APPEND(ssp_pair_head, pair);
+			#ifdef SORTER_DEBUG
+			pair_count++;
+			#endif
+
+			/* update nonce2 of the point */
+			ssp_ht->cells[key].point.nonce2 = point->nonce2;
+			/* or just delete it? */
+			/* or leave it be? */
+			goto out;
+		}
 	}
 
-	struct ssp_pair_element *pair = cgmalloc(sizeof(struct ssp_pair_element));
-	pair->nonce2[0] = copy->nonce2;
-	pair->nonce2[1] = tmp->nonce2;
-	LL_APPEND(ssp_pair_head, pair);
-	applog(LOG_DEBUG, "Tail: %08x, N2: %08x--%08x",
-	       copy->tail, copy->nonce2, tmp->nonce2);
-
-	HASH_DEL(ssp_points, tmp);
-	free(tmp);
+	/* discard */
+	#ifdef SORTER_DEBUG
+	discarded++;
+	#endif
+out:
+	#ifdef SORTER_DEBUG
+	cgtime(&tf);
+	insert_time += tdiff(&tf, &ti);
+	#endif
 	return;
 }
 
-void ssp_sorter_init(void)
+void ssp_sorter_init(uint32_t max_size, uint32_t limit, uint32_t c1, uint32_t c2)
 {
+	#ifdef SORTER_DEBUG
+	cgtime(&ssp_ti);
+	#endif
 
+	ssp_ht = (struct ssp_hashtable *)cgmalloc(sizeof(struct ssp_hashtable));
+
+	ssp_ht->max_size = max_size;
+	ssp_ht->limit = limit;
+	ssp_ht->c1 = c1;
+	ssp_ht->c2 = c2;
+	ssp_ht->size = 0;
+	ssp_ht->stratum = 0;
+	ssp_ht->cells = (struct ssp_ht_cell *)cgmalloc(sizeof(struct ssp_ht_cell) * max_size);
+	memset(ssp_ht->cells, 0, sizeof(struct ssp_ht_cell) * max_size);
 }
 
 void ssp_sorter_flush(void)
 {
-	struct ssp_point *current, *tmp;
+	#ifdef SORTER_DEBUG
+	double delta_t;
 
-	HASH_ITER(hh, ssp_points, current, tmp) {
-		HASH_DEL(ssp_points, current);
-		free(current);
-	}
+	cgtime(&ssp_tf);
+	delta_t = tdiff(&ssp_tf, &ssp_ti);
+
+	applog(LOG_NOTICE, "Stratum %d: %f s", ssp_ht->stratum, delta_t);
+	applog(LOG_NOTICE, "Stratum %d: get %d pairs. %f pair/s", ssp_ht->stratum, pair_count, pair_count / delta_t);
+	applog(LOG_NOTICE, "Stratum %d: discard %d points. %f point/s", ssp_ht->stratum, discarded, discarded / delta_t);
+	applog(LOG_NOTICE, "Stratum %d: record %d points. %f%% of hashtable. %f point/s", ssp_ht->stratum, ssp_ht->size, ssp_ht->size * 100.0 / ssp_ht->max_size, ssp_ht->size / delta_t);
+	applog(LOG_NOTICE, "Stratum %d: %d calls of sorter_insert. %f call/s", ssp_ht->stratum, calls, calls / delta_t);
+	applog(LOG_NOTICE, "Stratum %d: avg insert time - %f us", ssp_ht->stratum, insert_time * 1000000 / calls);
+	applog(LOG_NOTICE, "Stratum %d: k^2 / 2N / pair - %f", ssp_ht->stratum, 0.5 * calls * calls / 4294967296 / pair_count);
+	applog(LOG_NOTICE, "========================================================");
+
+	cgtime(&ssp_ti);
+	pair_count = 0;
+	discarded = 0;
+	calls = 0;
+	insert_time = 0;
+	#endif
+
+	ssp_ht->size = 0;
+	ssp_ht->stratum = (ssp_ht->stratum + 1) & 0xffffffff;
 
 	/* FIXME: free ssp_pair_head when the newblock found */
 }
@@ -152,7 +234,7 @@ static void *ssp_hasher_thread(void *userdata)
 			last_nonce2 = 0;
 			valid_nonce2 = false;
 			ssp_sorter_flush();
-			applog(LOG_DEBUG, "libssplus: stratum update");
+			applog(LOG_NOTICE, "libssplus: stratum update");
 		}
 
 		/* Note: hasher is fast enough, so the new job will start with a lower nonce2 */
@@ -382,6 +464,7 @@ void ssp_hasher_test(void)
 		{0xce,0x79,0x63,0xa5,0x43,0xe1,0x00,0x18,0xf2,0x3e,0x3d,0xfd,0x52,0x01,0x17,0x55,0xe5,0xc8,0x47,0x37,0xa0,0xd0,0x86,0x51,0xb8,0x8c,0x89,0x56,0x71,0xf3,0x96,0x49},
 		{0x88,0x73,0x89,0x13,0xa3,0xc7,0x3a,0xee,0x99,0x6c,0xc9,0xf5,0x76,0x0a,0xec,0x41,0xf6,0x97,0x99,0xd4,0x9b,0x09,0x36,0x4c,0x12,0xb3,0x6a,0x37,0x9c,0x18,0x42,0xef},
 	};
+
 	test_pool.nonce2_offset = 97;
 	test_pool.coinbase_len = sizeof(coinbase);
 	test_pool.coinbase = cgcalloc(sizeof(coinbase), 1);
@@ -394,7 +477,7 @@ void ssp_hasher_test(void)
 	}
 	memcpy(test_pool.coinbase, coinbase, sizeof(coinbase));
 
-	ssp_sorter_init();
+	ssp_sorter_init(HT_SIZE, HT_PRB_LMT, HT_PRB_C1, HT_PRB_C2);
 	ssp_hasher_init();
 
 	for (i = 0; i < 2; i++) {
@@ -407,7 +490,7 @@ void ssp_hasher_test(void)
 		if (ssp_sorter_get_pair(pair)) {
 			cgtime(&t_find_pair);
 			pair_diff = tdiff(&t_find_pair, &t_start);
-			applog(LOG_NOTICE, "%0.4fs\tGot a pair %08x-%08x", pair_diff, pair[0], pair[1]);
+			applog(LOG_NOTICE, "%0.8fs\tGot a pair %08x-%08x", pair_diff, pair[0], pair[1]);
 			memcpy(&t_start, &t_find_pair, sizeof(t_find_pair));
 		}
 	}

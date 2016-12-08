@@ -10052,7 +10052,7 @@ int main(int argc, char *argv[])
 
 #ifdef USE_AVALON7
 	if (opt_avalon7_ssplus_enable) {
-		ssp_sorter_init();
+		ssp_sorter_init(HT_SIZE, HT_PRB_LMT, HT_PRB_C1, HT_PRB_C2);
 		ssp_hasher_init();
 	}
 #endif
