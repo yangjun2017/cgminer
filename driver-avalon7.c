@@ -207,11 +207,6 @@ static uint16_t decode_vin(uint16_t volt)
 	return (volt * AVA7_VIN_ADC_RATIO);
 }
 
-static uint16_t decode_vin(uint16_t volt)
-{
-	return (volt * AVA7_VIN_ADC_RATIO);
-}
-
 static double decode_pvt_temp(uint16_t pvt_code)
 {
 	double a4 = -1.1876E-11;
