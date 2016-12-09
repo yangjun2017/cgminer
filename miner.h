@@ -980,6 +980,7 @@ struct pool;
 
 extern bool opt_work_update;
 extern bool opt_protocol;
+extern bool opt_notify_once;
 extern bool have_longpoll;
 extern char *opt_kernel_path;
 extern char *opt_socks_proxy;
@@ -1124,6 +1125,7 @@ extern void set_target(unsigned char *dest_target, double diff);
 #if defined (USE_AVALON2) || defined (USE_AVALON4) || defined (USE_AVALON7) || defined (USE_AVALON_MINER) || defined (USE_HASHRATIO)
 bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *real_pool,
 			 uint32_t nonce2, uint32_t nonce, uint32_t ntime);
+void gen_merkle_root(struct pool *pool, uint32_t nonce2le);
 #endif
 extern int restart_wait(struct thr_info *thr, unsigned int mstime);
 

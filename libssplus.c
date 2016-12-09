@@ -100,7 +100,7 @@ static double insert_time = .0;
 
 static void ssp_sorter_insert(const struct ssp_point *point)
 {
-	int i;
+	uint32_t i;
 	uint32_t key;
 
 	#ifdef SORTER_DEBUG
@@ -172,7 +172,7 @@ void ssp_sorter_init(uint32_t max_size, uint32_t limit, uint32_t c1, uint32_t c2
 
 void ssp_sorter_flush(void)
 {
-	#ifdef SORTER_DEBUG
+#ifdef SORTER_DEBUG
 	double delta_t;
 
 	cgtime(&ssp_tf);
@@ -192,11 +192,10 @@ void ssp_sorter_flush(void)
 	discarded = 0;
 	calls = 0;
 	insert_time = 0;
-	#endif
+#endif
 
 	ssp_ht->size = 0;
 	ssp_ht->stratum = (ssp_ht->stratum + 1) & 0xffffffff;
-
 	/* FIXME: free ssp_pair_head when the newblock found */
 }
 
@@ -207,12 +206,16 @@ int ssp_sorter_get_pair(ssp_pair pair)
 	if (!ssp_pair_head)
 		return 0;
 
+	mutex_lock(&(sspinfo.hasher_lock));
+
 	pair[0] = ssp_pair_head->nonce2[0];
 	pair[1] = ssp_pair_head->nonce2[1];
 
 	tmp = ssp_pair_head;
 	ssp_pair_head = ssp_pair_head->next;
 	free(tmp);
+
+	mutex_unlock(&(sspinfo.hasher_lock));
 
 	return 1;
 }
@@ -465,6 +468,7 @@ void ssp_hasher_test(void)
 		{0x88,0x73,0x89,0x13,0xa3,0xc7,0x3a,0xee,0x99,0x6c,0xc9,0xf5,0x76,0x0a,0xec,0x41,0xf6,0x97,0x99,0xd4,0x9b,0x09,0x36,0x4c,0x12,0xb3,0x6a,0x37,0x9c,0x18,0x42,0xef},
 	};
 
+	test_pool.n2size = 4;
 	test_pool.nonce2_offset = 97;
 	test_pool.coinbase_len = sizeof(coinbase);
 	test_pool.coinbase = cgcalloc(sizeof(coinbase), 1);
@@ -491,6 +495,8 @@ void ssp_hasher_test(void)
 			cgtime(&t_find_pair);
 			pair_diff = tdiff(&t_find_pair, &t_start);
 			applog(LOG_NOTICE, "%0.8fs\tGot a pair %08x-%08x", pair_diff, pair[0], pair[1]);
+			gen_merkle_root(&test_pool, pair[0]);
+			gen_merkle_root(&test_pool, pair[1]);
 			memcpy(&t_start, &t_find_pair, sizeof(t_find_pair));
 		}
 	}

@@ -138,6 +138,7 @@ static char packagename[256];
 
 bool opt_work_update;
 bool opt_protocol;
+bool opt_notify_once;
 static struct benchfile_layout {
 	int length;
 	char *name;
@@ -1804,6 +1805,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--protocol-dump|-P",
 			opt_set_bool, &opt_protocol,
 			"Verbose dump of protocol-level activities"),
+	OPT_WITHOUT_ARG("--notify-once|-N",
+			opt_set_bool, &opt_notify_once,
+			"Only use the first stratum package"),
 	OPT_WITH_ARG("--queue|-Q",
 		     set_null, NULL, &opt_set_null,
 		     opt_hidden),
@@ -7198,6 +7202,35 @@ bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *r
 	free_work(work);
 	return ret;
 }
+
+void gen_merkle_root(struct pool *pool, uint32_t nonce2le)
+{
+	unsigned char merkle_root[32], merkle_sha[64];
+	uint32_t *data32, *swap32;
+	int i;
+
+	cg_memcpy(pool->coinbase + pool->nonce2_offset, &nonce2le, pool->n2size);
+
+	/* Generate merkle root */
+	gen_hash(pool->coinbase, merkle_root, pool->coinbase_len);
+	cg_memcpy(merkle_sha, merkle_root, 32);
+	for (i = 0; i < pool->merkles; i++) {
+		cg_memcpy(merkle_sha + 32, pool->swork.merkle_bin[i], 32);
+		gen_hash(merkle_sha, merkle_root, 64);
+		cg_memcpy(merkle_sha, merkle_root, 32);
+	}
+	data32 = (uint32_t *)merkle_sha;
+	swap32 = (uint32_t *)merkle_root;
+	flip32(swap32, data32);
+
+	{
+		char *merkle_hash;
+
+		merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
+		applog(LOG_NOTICE, "[M-N2]: %s-%08x", merkle_hash, nonce2le);
+		free(merkle_hash);
+	}
+}
 #endif
 
 /* Generates stratum based work based on the most recent notify information
@@ -9884,6 +9917,8 @@ int main(int argc, char *argv[])
 		early_quit(1, "usb resource thread create failed");
 	pthread_detach(thr->pth);
 #endif
+
+	ssp_hasher_test();
 
 	/* Use the DRIVER_PARSE_COMMANDS macro to fill all the device_drvs */
 	DRIVER_PARSE_COMMANDS(DRIVER_FILL_DEVICE_DRV)
