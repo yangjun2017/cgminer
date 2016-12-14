@@ -7203,12 +7203,16 @@ bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *r
 	return ret;
 }
 
-void gen_merkle_root(struct pool *pool, uint32_t nonce2le)
+void gen_merkle_root(struct pool *pool, uint64_t nonce2)
 {
 	unsigned char merkle_root[32], merkle_sha[64];
 	uint32_t *data32, *swap32;
+	uint64_t nonce2le;
 	int i;
 
+	/* Update coinbase. Always use an LE encoded nonce2 to fill in values
+	 * from left to right and prevent overflow errors with small n2sizes */
+	nonce2le = htole64(nonce2);
 	cg_memcpy(pool->coinbase + pool->nonce2_offset, &nonce2le, pool->n2size);
 
 	/* Generate merkle root */
@@ -7227,7 +7231,7 @@ void gen_merkle_root(struct pool *pool, uint32_t nonce2le)
 		char *merkle_hash;
 
 		merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
-		applog(LOG_NOTICE, "[M-N2]: %s-%08x", merkle_hash, nonce2le);
+		applog(LOG_DEBUG, "[M-N2]: %s-%08x-%08x", merkle_hash, (uint32_t)nonce2le, (uint32_t)nonce2);
 		free(merkle_hash);
 	}
 }
@@ -9917,8 +9921,6 @@ int main(int argc, char *argv[])
 		early_quit(1, "usb resource thread create failed");
 	pthread_detach(thr->pth);
 #endif
-
-	ssp_hasher_test();
 
 	/* Use the DRIVER_PARSE_COMMANDS macro to fill all the device_drvs */
 	DRIVER_PARSE_COMMANDS(DRIVER_FILL_DEVICE_DRV)
