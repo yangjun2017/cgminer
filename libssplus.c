@@ -16,7 +16,6 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-#include "utlist.h"
 #include "sha2.h"
 
 #include "libssplus.h"
