@@ -131,7 +131,7 @@ static void ssp_sorter_insert(const struct ssp_point *point)
 
 			/* update nonce2 of the point */
 			ssp_ht->cells[key].nonce2 = 0;
-			ssp_ht->cells[key].nonce2 = 0;
+			ssp_ht->cells[key].tail = 0;
 			/* or just delete it? */
 			/* or leave it be? */
 			goto out;
