@@ -123,7 +123,6 @@ static void ssp_sorter_insert(const struct ssp_point *point)
 			ssp_pair_tail->nonce2[1] = ssp_ht->cells[key].nonce2;
 			ssp_pair_tail->next = (struct ssp_pair_element *)cgmalloc(sizeof(struct ssp_pair_element));
 			ssp_pair_tail = ssp_pair_tail->next;
-
 #ifdef SORTER_DEBUG
 			pair_count++;
 #endif
@@ -162,8 +161,7 @@ void ssp_sorter_init(uint32_t max_size, uint32_t limit, uint32_t c1, uint32_t c2
 	memset(ssp_ht->cells, 0, sizeof(struct ssp_point) * max_size);
 
 	ssp_pair_head = (struct ssp_pair_element *)cgmalloc(sizeof(struct ssp_pair_element));
-	ssp_pair_tail = (struct ssp_pair_element *)cgmalloc(sizeof(struct ssp_pair_element));
-	ssp_pair_head->next = ssp_pair_tail;
+	ssp_pair_tail = ssp_pair_head;
 }
 
 void ssp_sorter_flush(void)
@@ -197,23 +195,30 @@ void ssp_sorter_flush(void)
 	ssp_ht->size = 0;
 	memset(ssp_ht->cells, 0, sizeof(struct ssp_point) * ssp_ht->max_size);
 
-	/* FIXME: free ssp_pair_head when the newblock found */
+	/* MM only use one stratum, we need drop all pairs */
+	while (ssp_pair_head != ssp_pair_tail) {
+		struct ssp_pair_element *tmp;
+
+		tmp = ssp_pair_head;
+		ssp_pair_head = tmp->next;
+		free(tmp);
+	}
 }
 
 int ssp_sorter_get_pair(ssp_pair pair)
 {
 	struct ssp_pair_element *tmp;
 
-	if (ssp_pair_head->next == ssp_pair_tail)
+	if (ssp_pair_head == ssp_pair_tail)
 		return 0;
 
 	mutex_lock(&(sspinfo.hasher_lock));
 
-	tmp = ssp_pair_head->next;
+	tmp = ssp_pair_head;
 	pair[0] = tmp->nonce2[0];
 	pair[1] = tmp->nonce2[1];
 
-	ssp_pair_head->next = tmp->next;
+	ssp_pair_head = tmp->next;
 	free(tmp);
 #ifdef SORTER_DEBUG
 	consumed++;
