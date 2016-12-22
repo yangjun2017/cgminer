@@ -608,7 +608,8 @@ static int decode_pkg(struct cgpu_info *avalon7, struct avalon7_ret *ar, int mod
 		info->error_crc[modular_id][ar->idx] += be32toh(tmp);
 
 		memcpy(&tmp, ar->data + 28, 4);
-		info->mm_got_pairs += be32toh(tmp);
+		info->mm_got_pairs += be32toh(tmp) >> 16;
+		info->mm_got_invalid_pairs += be32toh(tmp) & 0xffff;
 		break;
 	case AVA7_P_STATUS_PMU:
 		/* TODO: decode ntc led from PMU */
@@ -1320,7 +1321,7 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 				tmp = be32toh(pair[0]);
 				memcpy(send_pkg.data + pair_counts * 8, &tmp, 4);
 				tmp = be32toh(pair[1]);
-				applog(LOG_NOTICE, "send pair %08x-%08x", pair[0], pair[1]);
+				applog(LOG_DEBUG, "send pair %08x-%08x", pair[0], pair[1]);
 				memcpy(send_pkg.data + pair_counts * 8 + 4, &tmp, 4);
 				pair_counts++;
 				info->gen_pairs++;
@@ -2341,7 +2342,7 @@ static struct api_data *avalon7_api_stats(struct cgpu_info *avalon7)
 		statbuf[strlen(statbuf) - 1] = ']';
 
 		strcat(statbuf, " PAIRS[");
-		sprintf(buf, "%"PRIu64" %"PRIu64" ", info->mm_got_pairs, info->gen_pairs);
+		sprintf(buf, "%"PRIu64" %"PRIu64" %"PRIu64" ", info->mm_got_pairs, info->mm_got_invalid_pairs, info->gen_pairs);
 		strcat(statbuf, buf);
 		statbuf[strlen(statbuf) - 1] = ']';
 

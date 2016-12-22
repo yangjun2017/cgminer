@@ -276,6 +276,7 @@ struct avalon7_info {
 	bool conn_overloaded;
 
 	uint64_t mm_got_pairs;
+	uint64_t mm_got_invalid_pairs;
 	uint64_t gen_pairs;
 
 	/* SSP */
