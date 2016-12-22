@@ -215,13 +215,10 @@ int ssp_sorter_get_pair(ssp_pair pair)
 
 	ssp_pair_head->next = tmp->next;
 	free(tmp);
-	mutex_unlock(&(sspinfo.hasher_lock));
 #ifdef SORTER_DEBUG
 	consumed++;
 #endif
-
 	mutex_unlock(&(sspinfo.hasher_lock));
-
 	return 1;
 }
 
