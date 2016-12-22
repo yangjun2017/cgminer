@@ -209,10 +209,12 @@ int ssp_sorter_get_pair(ssp_pair pair)
 {
 	struct ssp_pair_element *tmp;
 
-	if (ssp_pair_head == ssp_pair_tail)
-		return 0;
-
 	mutex_lock(&(sspinfo.hasher_lock));
+
+	if (ssp_pair_head == ssp_pair_tail) {
+		mutex_unlock(&(sspinfo.hasher_lock));
+		return 0;
+	}
 
 	tmp = ssp_pair_head;
 	pair[0] = tmp->nonce2[0];
