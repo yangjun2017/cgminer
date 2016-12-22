@@ -7203,10 +7203,10 @@ bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *r
 	return ret;
 }
 
-void gen_merkle_root(struct pool *pool, uint64_t nonce2)
+uint32_t gen_merkle_root(struct pool *pool, uint64_t nonce2)
 {
 	unsigned char merkle_root[32], merkle_sha[64];
-	uint32_t *data32, *swap32;
+	uint32_t *data32, *swap32, tail;
 	uint64_t nonce2le;
 	int i;
 
@@ -7234,6 +7234,10 @@ void gen_merkle_root(struct pool *pool, uint64_t nonce2)
 		applog(LOG_DEBUG, "[M-N2]: %s-%08x-%08x", merkle_hash, (uint32_t)nonce2le, (uint32_t)nonce2);
 		free(merkle_hash);
 	}
+
+	cg_memcpy(&tail, merkle_root + 28, 4);
+
+	return tail;
 }
 #endif
 

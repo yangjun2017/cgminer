@@ -1277,6 +1277,7 @@ static inline void avalon7_detect(bool __maybe_unused hotplug)
 		avalon7_iic_detect();
 }
 
+#define PAIR_CHECK
 static void *avalon7_ssp_fill_pairs(void *userdata)
 {
 	char threadname[16];
@@ -1290,6 +1291,8 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 	uint32_t tmp;
 #ifdef PAIR_CHECK
 	struct pool pool_mirror, *pool;
+	uint32_t tail[2];
+	uint64_t pass, fail;
 #endif
 
 	snprintf(threadname, sizeof(threadname), "%d/Av7ssp", avalon7->device_id);
@@ -1301,8 +1304,13 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 		if (ssp_sorter_get_pair(pair)) {
 			pool = current_pool();
 			copy_pool_stratum(&pool_mirror, pool);
-			gen_merkle_root(&pool_mirror, pair[0]);
-			gen_merkle_root(&pool_mirror, pair[1]);
+			tail[0] = gen_merkle_root(&pool_mirror, pair[0]);
+			tail[1] = gen_merkle_root(&pool_mirror, pair[1]);
+			if (tail[0] != tail[1]) {
+				fail++;
+				applog(LOG_NOTICE, "tail mismatch %08x-%08x, F: %"PRIu64", P: %"PRIu64", Errate: %0.2f", tail[0], tail[1], fail, pass, fail * 1.0 / (pass + fail));
+			} else
+				pass++;
 		}
 		cgsleep_ms(opt_avalon7_polling_delay);
 #else
