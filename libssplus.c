@@ -280,7 +280,7 @@ static void *ssp_hasher_thread(void *userdata)
 	return NULL;
 }
 
-static inline void ssp_haser_fill_iram(struct ssp_hasher_instruction *p_inst, uint32_t inst_index)
+static inline void ssp_hasher_fill_iram(struct ssp_hasher_instruction *p_inst, uint32_t inst_index)
 {
 	uint8_t i;
 	volatile uint32_t *p_iram_addr;
@@ -391,7 +391,7 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 
 	coinbase_len_prehash = pool->nonce2_offset - (pool->nonce2_offset % SHA256_BLOCK_SIZE);
 	sha256_prehash(pool->coinbase, coinbase_len_prehash, inst.data + 32);
-	ssp_haser_fill_iram(&inst, inst_index);
+	ssp_hasher_fill_iram(&inst, inst_index);
 	inst_index++;
 
 	/* coinbase */
@@ -406,7 +406,7 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 		} else
 			inst.opcode |= INST_MID_LASTHASH;
 		memcpy(inst.data, pool->coinbase + coinbase_len_prehash + i * SHA256_BLOCK_SIZE, SHA256_BLOCK_SIZE);
-		ssp_haser_fill_iram(&inst, inst_index);
+		ssp_hasher_fill_iram(&inst, inst_index);
 		inst_index++;
 	}
 
@@ -423,10 +423,10 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 	if (len_rem <= (SHA256_BLOCK_SIZE - 9)) {
 		for (i = 0; i < 8; i++)
 			inst.data[63 - i] = (coinbase_len_bits >> (i * 8)) & 0xff;
-		ssp_haser_fill_iram(&inst, inst_index);
+		ssp_hasher_fill_iram(&inst, inst_index);
 		inst_index++;
 	} else {
-		ssp_haser_fill_iram(&inst, inst_index);
+		ssp_hasher_fill_iram(&inst, inst_index);
 		inst_index++;
 
 		memset(inst.data, 0, SHA256_BLOCK_SIZE);
@@ -434,37 +434,37 @@ void ssp_hasher_update_stratum(struct pool *pool, bool clean)
 		inst.opcode |= INST_MID_LASTHASH;
 		for (i = 0; i < 8; i++)
 			inst.data[63 - i] = (coinbase_len_bits >> (i * 8)) & 0xff;
-		ssp_haser_fill_iram(&inst, inst_index);
+		ssp_hasher_fill_iram(&inst, inst_index);
 		inst_index++;
 	}
 
 	/* double hash coinbase */
 	inst.opcode = INST_DATA_LASTHASH_PAD | INST_MID_INIT | NEXT_ADDR(inst_index + 1);
 	memset(inst.data, 0, SHA256_BLOCK_SIZE);
-	ssp_haser_fill_iram(&inst, inst_index);
+	ssp_hasher_fill_iram(&inst, inst_index);
 	inst_index++;
 
 	/* merkle branches */
 	for (merkle_index = 0; merkle_index < pool->merkles; merkle_index++) {
 		inst.opcode = INST_DATA_LASTHASH_IRAM | INST_MID_INIT | NEXT_ADDR(inst_index + 1);
 		memcpy(inst.data + 32, pool->swork.merkle_bin[merkle_index], 32);
-		ssp_haser_fill_iram(&inst, inst_index);
+		ssp_hasher_fill_iram(&inst, inst_index);
 		inst_index++;
 
 		inst.opcode = INST_DATA_PAD512 | INST_MID_LASTHASH | NEXT_ADDR(inst_index + 1);
 		memset(inst.data, 0, SHA256_BLOCK_SIZE);
-		ssp_haser_fill_iram(&inst, inst_index);
+		ssp_hasher_fill_iram(&inst, inst_index);
 		inst_index++;
 
 		inst.opcode = INST_DATA_LASTHASH_PAD | INST_MID_INIT | NEXT_ADDR(inst_index + 1);
 		memset(inst.data, 0, SHA256_BLOCK_SIZE);
-		ssp_haser_fill_iram(&inst, inst_index);
+		ssp_hasher_fill_iram(&inst, inst_index);
 		inst_index++;
 	}
 
 	/* done */
 	inst.opcode = INST_DONE;
-	ssp_haser_fill_iram(&inst, inst_index);
+	ssp_hasher_fill_iram(&inst, inst_index);
 
 	sspinfo.stratum_update = true;
 	ssp_hasher_start();
