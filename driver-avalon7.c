@@ -1286,7 +1286,6 @@ static inline void avalon7_detect(bool __maybe_unused hotplug)
 		avalon7_iic_detect();
 }
 
-#define PAIR_CHECK
 static void *avalon7_ssp_fill_pairs(void *userdata)
 {
 	char threadname[16];
@@ -1360,8 +1359,9 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 				applog(LOG_NOTICE, "%s-%d: send pair failed %d",
 						avalon7->drv->name, avalon7->device_id, err);
 			}
-			cgsleep_ms(opt_avalon7_polling_delay);
 		}
+		/* TODO: Update this for more than one machines */
+		cgsleep_ms(150);
 #endif
 	}
 
