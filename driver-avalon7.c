@@ -1317,9 +1317,19 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 			tail[1] = gen_merkle_root(&pool_mirror, pair[1]);
 			if (tail[0] != tail[1]) {
 				fail++;
-				applog(LOG_NOTICE, "tail mismatch %08x-%08x, F: %"PRIu64", P: %"PRIu64", Errate: %0.2f", tail[0], tail[1], fail, pass, fail * 1.0 / (pass + fail));
-			} else
+				applog(LOG_NOTICE, "avalon7_ssp_fill_pairs: tail mismatch (%08x:%08x -> %08x:%08x)",
+						tail[0],
+						tail[1],
+						pair[0],
+						pair[1]);
+				applog(LOG_NOTICE, "avalon7_ssp_fill_pairs: tail mismatch detail %08x-%08x, F: %"PRIu64", P: %"PRIu64", Errate: %0.2f", tail[0], tail[1], fail, pass, fail * 1.0 / (pass + fail));
+			} else {
+				applog(LOG_NOTICE, "avalon7_ssp_fill_pairs: tail pass (%08x -> %08x:%08x)",
+						tail[0],
+						pair[0],
+						pair[1]);
 				pass++;
+			}
 		}
 		cgsleep_ms(opt_avalon7_polling_delay);
 #else
