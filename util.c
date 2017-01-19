@@ -2308,6 +2308,8 @@ bool parse_method(struct pool *pool, char *s)
 		goto out_decref;
 
 	if (!strncasecmp(buf, "mining.notify", 13)) {
+		if (pool->stratum_notify && opt_notify_once)
+			goto out_decref;
 		if (parse_notify(pool, params))
 			pool->stratum_notify = ret = true;
 		else
