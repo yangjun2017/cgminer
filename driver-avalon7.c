@@ -531,10 +531,10 @@ static int decode_pkg(struct cgpu_info *avalon7, struct avalon7_ret *ar, int mod
 		if (ntime > info->max_ntime)
 			info->max_ntime = ntime;
 
-		applog(LOG_NOTICE, "%s-%d-%d: Found! P:%d - N2:%08x N:%08x NR:%d/%d [M:%d - MW: (%"PRIu64",%"PRIu64",%"PRIu64",%"PRIu64")]",
+		applog(LOG_NOTICE, "%s-%d-%d: Found! P:%d - N2:%08x N:%08x NR:%d/%d [M:%d, A:%d, C:%d - MW: (%"PRIu64",%"PRIu64",%"PRIu64",%"PRIu64")]",
 		       avalon7->drv->name, avalon7->device_id, modular_id,
 		       pool_no, nonce2, nonce, ntime, info->max_ntime,
-		       miner,
+		       miner, chip_id, nonce & 0x7f,
 		       info->chip_matching_work[modular_id][miner][0],
 		       info->chip_matching_work[modular_id][miner][1],
 		       info->chip_matching_work[modular_id][miner][2],
