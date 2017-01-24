@@ -121,7 +121,7 @@ static void ssp_sorter_insert(const struct ssp_point *point)
 			/* get a collision */
 			ssp_pair_tail->nonce2[0] = point->nonce2;
 			ssp_pair_tail->nonce2[1] = ssp_ht->cells[key].nonce2;
-			applog(LOG_NOTICE, "INSERT: (%08x -> %08x:%08x)",
+			applog(LOG_DEBUG, "INSERT: (%08x -> %08x:%08x)",
 				point->tail,
 				ssp_pair_tail->nonce2[0],
 				ssp_pair_tail->nonce2[1]);
