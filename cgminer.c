@@ -257,6 +257,8 @@ static char *opt_set_avalon4_freq;
 #ifdef USE_AVALON7
 static char *opt_set_avalon7_fan;
 static char *opt_set_avalon7_voltage;
+static char *opt_set_avalon7_voltage_level;
+static char *opt_set_avalon7_voltage_offset;
 static char *opt_set_avalon7_freq;
 #endif
 #ifdef USE_AVALON_MINER
@@ -854,7 +856,7 @@ static char *set_int_0_to_7680(const char *arg, int *i)
         return set_int_range(arg, i, 0, 7680);
 }
 
-#if defined(USE_AVALON4) || defined(USE_AVALON7)
+#if defined(USE_AVALON4)
 static char *set_int_1_to_60(const char *arg, int *i)
 {
         return set_int_range(arg, i, 1, 60);
@@ -1392,6 +1394,12 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_CBARG("--avalon7-voltage",
 		     set_avalon7_voltage, NULL, &opt_set_avalon7_voltage,
 		     "Set Avalon7 default core voltage, in millivolts, step: 78"),
+	OPT_WITH_CBARG("--avalon7-voltage-level",
+		     set_avalon7_voltage_level, NULL, &opt_set_avalon7_voltage_level,
+		     "Set Avalon7 default level of core voltage, range:[0, 15], step: 1"),
+	OPT_WITH_CBARG("--avalon7-voltage-offset",
+		     set_avalon7_voltage_offset, NULL, &opt_set_avalon7_voltage_offset,
+		     "Set Avalon7 default offset of core voltage, range:[-2, 1], step: 1"),
 	OPT_WITH_CBARG("--avalon7-freq",
 		     set_avalon7_freq, NULL, &opt_set_avalon7_freq,
 		     "Set Avalon7 default frequency, range:[24, 1404], step: 12, example: 500"),
@@ -1434,18 +1442,6 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--avalon7-iic-detect",
 		     opt_set_bool, &opt_avalon7_iic_detect,
 		     "Enable Avalon7 detect through iic controller"),
-	OPT_WITH_ARG("--avalon7-freqadj-time",
-		     set_int_1_to_60, opt_show_intval, &opt_avalon7_freqadj_time,
-		     "Set Avalon7 check interval when run in AVA7_FREQ_TEMPADJ_MODE"),
-	OPT_WITH_ARG("--avalon7-delta-temp",
-		     opt_set_intval, opt_show_intval, &opt_avalon7_delta_temp,
-		     "Set Avalon7 delta temperature when reset freq in AVA7_FREQ_TEMPADJ_MODE"),
-	OPT_WITH_ARG("--avalon7-delta-freq",
-		     opt_set_intval, opt_show_intval, &opt_avalon7_delta_freq,
-		     "Set Avalon7 delta freq when adjust freq in AVA7_FREQ_TEMPADJ_MODE"),
-	OPT_WITH_ARG("--avalon7-freqadj-temp",
-		     opt_set_intval, opt_show_intval, &opt_avalon7_freqadj_temp,
-		     "Set Avalon7 check temperature when run into AVA7_FREQ_TEMPADJ_MODE"),
 	OPT_WITH_ARG("--avalon7-nonce-mask",
 		     set_int_24_to_32, opt_show_intval, &opt_avalon7_nonce_mask,
 		     "Set A3212 nonce mask, range 24-32."),
@@ -4339,6 +4335,29 @@ void roll_work(struct work *work)
 	work->id = total_work_inc();
 }
 
+void roll_work_ntime(struct work *work, int noffset)
+{
+	uint32_t *work_ntime;
+	uint32_t ntime;
+
+	work_ntime = (uint32_t *)(work->data + 68);
+	ntime = be32toh(*work_ntime);
+	ntime += noffset;
+	*work_ntime = htobe32(ntime);
+	local_work++;
+	work->rolls += noffset;
+	work->nonce = 0;
+	applog(LOG_DEBUG, "Successfully rolled work");
+
+	/* Change the ntime field if this is stratum work */
+	if (work->ntime)
+		modify_ntime(work->ntime, noffset);
+
+	/* This is now a different work item so it needs a different ID for the
+	 * hashtable */
+	work->id = total_work_inc();
+}
+
 struct work *make_clone(struct work *work)
 {
 	struct work *work_clone = copy_work(work);
@@ -7182,9 +7201,7 @@ bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *r
 	cg_wunlock(&pool->data_lock);
 
 	gen_stratum_work(pool, work);
-	while (ntime--) {
-		roll_work(work);
-	}
+	roll_work_ntime(work, ntime);
 
 	work->pool = real_pool;
 	/* Inherit the sdiff from the original stratum */
