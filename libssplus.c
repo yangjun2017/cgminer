@@ -483,12 +483,12 @@ struct testcase {
 #define TESTCASE_COUNT	3
 void ssp_hasher_test(void)
 {
-	struct pool test_pool;
+	struct pool test_pool[2];
 	struct timeval t_start, t_find_pair;
 	ssp_pair pair;
 	uint32_t tail[2];
 	uint32_t pair_count = 0;
-	int i;
+	int i, pool_index;
 	double pair_diff;
 	struct testcase tc[TESTCASE_COUNT];
 	unsigned int tci = 0;
@@ -593,18 +593,20 @@ void ssp_hasher_test(void)
 	cgtime(&t_start);
 	while (1) {
 		if (stratum_update) {
-			test_pool.coinbase_len = tc[tci].coinbase_len;
-			test_pool.coinbase = cgcalloc(test_pool.coinbase_len, 1);
-			test_pool.merkles = tc[tci].merkles;
+			for (pool_index = 0; pool_index < 2; pool_index++) {
+				test_pool[pool_index].coinbase_len = tc[tci].coinbase_len;
+				test_pool[pool_index].coinbase = cgcalloc(test_pool[pool_index].coinbase_len, 1);
+				test_pool[pool_index].merkles = tc[tci].merkles;
 
-			test_pool.swork.merkle_bin = cgmalloc(sizeof(char *) * test_pool.merkles + 1);
-			for (i = 0; i < test_pool.merkles; i++) {
-				test_pool.swork.merkle_bin[i] = cgmalloc(32);
-				memcpy(test_pool.swork.merkle_bin[i], tc[tci].merkle_branches[i], 32);
+				test_pool[pool_index].swork.merkle_bin = cgmalloc(sizeof(char *) * test_pool[pool_index].merkles + 1);
+				for (i = 0; i < test_pool[pool_index].merkles; i++) {
+					test_pool[pool_index].swork.merkle_bin[i] = cgmalloc(32);
+					memcpy(test_pool[pool_index].swork.merkle_bin[i], tc[tci].merkle_branches[i], 32);
+				}
+				memcpy(test_pool[pool_index].coinbase, tc[tci].coinbase, test_pool[pool_index].coinbase_len);
+				test_pool[pool_index].n2size = tc[tci].n2size;
+				test_pool[pool_index].nonce2_offset = tc[tci].nonce2_offset;
 			}
-			memcpy(test_pool.coinbase, tc[tci].coinbase, test_pool.coinbase_len);
-			test_pool.n2size = tc[tci].n2size;
-			test_pool.nonce2_offset = tc[tci].nonce2_offset;
 			stratum_update = false;
 			hasher_update = true;
 		}
@@ -613,8 +615,8 @@ void ssp_hasher_test(void)
 			cgtime(&t_find_pair);
 			pair_diff = tdiff(&t_find_pair, &t_start);
 			applog(LOG_NOTICE, "%0.8fs\tGot a pair %08x-%08x", pair_diff, pair[0], pair[1]);
-			tail[0] = gen_merkle_root(&test_pool, pair[0]);
-			tail[1] = gen_merkle_root(&test_pool, pair[1]);
+			tail[0] = gen_merkle_root(&test_pool[1], pair[0]);
+			tail[1] = gen_merkle_root(&test_pool[1], pair[1]);
 			if (tail[0] != tail[1]) {
 				applog(LOG_NOTICE, "tail mismatch (%08x:%08x -> %08x:%08x)",
 						tail[0],
@@ -636,15 +638,17 @@ void ssp_hasher_test(void)
 				pair_count = 0;
 				tci = (tci + 1) % TESTCASE_COUNT;
 
-				free(test_pool.coinbase);
-				for (i = 0; i < test_pool.merkles; i++)
-					free(test_pool.swork.merkle_bin[i]);
+				for (pool_index = 0; pool_index < 2; pool_index++) {
+					free(test_pool[pool_index].coinbase);
+					for (i = 0; i < test_pool[pool_index].merkles; i++)
+						free(test_pool[pool_index].swork.merkle_bin[i]);
+				}
 			}
 		}
 
 		if (hasher_update) {
 			hasher_update = false;
-			ssp_hasher_update_stratum(&test_pool, true);
+			ssp_hasher_update_stratum(&test_pool[0], true);
 		}
 	}
 
