@@ -9918,6 +9918,12 @@ int main(int argc, char *argv[])
 
 	gwsched_thr_id = 0;
 
+#ifdef USE_AVALON7
+	if (opt_avalon7_ssplus_enable) {
+		ssp_sorter_init(HT_SIZE, HT_PRB_LMT, HT_PRB_C1, HT_PRB_C2);
+		ssp_hasher_init();
+	}
+#endif
 #ifdef USE_USBUTILS
 	usb_initialise();
 
@@ -10095,12 +10101,6 @@ int main(int argc, char *argv[])
 #endif
 	};
 
-#ifdef USE_AVALON7
-	if (opt_avalon7_ssplus_enable) {
-		ssp_sorter_init(HT_SIZE, HT_PRB_LMT, HT_PRB_C1, HT_PRB_C2);
-		ssp_hasher_init();
-	}
-#endif
 begin_bench:
 	total_mhashes_done = 0;
 	for (i = 0; i < total_devices; i++) {
@@ -10169,14 +10169,9 @@ begin_bench:
 		int ts, max_staged = max_queue;
 		struct pool *pool;
 
-		if (opt_work_update) {
+		if (opt_work_update)
 			signal_work_update();
-			if (opt_avalon7_ssplus_enable) {
-				pool = current_pool();
-				if (pool->has_stratum)
-					ssp_hasher_update_stratum(pool, true);
-			}
-		}
+
 		opt_work_update = false;
 
 		mutex_lock(stgd_lock);
