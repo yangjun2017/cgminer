@@ -1092,7 +1092,6 @@ static void avalon7_stratum_pkgs(struct cgpu_info *avalon7, struct pool *pool)
 	int coinbase_len_posthash, coinbase_len_prehash;
 	uint8_t coinbase_prehash[32];
 	uint32_t range, start;
-	double set_diff;
 
 	/* Send out the first stratum message STATIC */
 	applog(LOG_DEBUG, "%s-%d: Pool stratum message STATIC: %d, %d, %d, %d, %d",
@@ -1142,17 +1141,9 @@ static void avalon7_stratum_pkgs(struct cgpu_info *avalon7, struct pool *pool)
 		return;
 
 	if (pool->sdiff <= AVA7_DRV_DIFFMAX)
-		set_diff = pool->sdiff;
+		set_target(target, pool->sdiff);
 	else
-		set_diff = AVA7_DRV_DIFFMAX;
-
-	/* pool diff should >= 1 */
-	if (set_diff == 1)
-		set_target(target, 1);
-	else {
-		/* TODO: Fix SSP mode should use the diff to the halt of SS mode */
-		set_target(target, opt_avalon7_ssplus_enable ? (set_diff / 2) : set_diff);
-	}
+		set_target(target, AVA7_DRV_DIFFMAX);
 
 	memcpy(pkg.data, target, 32);
 	if (opt_debug) {
