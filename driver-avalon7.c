@@ -1348,7 +1348,7 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 	struct avalon7_pkg send_pkg;
 	ssp_pair pair;
 	uint8_t pair_counts;
-	int i, err;
+	int i, err, fill_timeout;;
 	uint32_t tmp;
 #ifdef PAIR_CHECK
 	struct pool pool_mirror, *pool;
@@ -1358,6 +1358,9 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 
 	snprintf(threadname, sizeof(threadname), "%d/Av7ssp", avalon7->device_id);
 	RenameThread(threadname);
+
+	/* timeout in ms = count of points * 4 * ntime_offset / max_ghs(10T) * 1000 */
+	fill_timeout = 8 * 4 * AVA7_DEFAULT_NTIME_OFFSET * 1.0 / 10000 * 1000;
 
 	cgsleep_ms(3000);
 	while (likely(!avalon7->shutdown)) {
@@ -1413,8 +1416,7 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 						avalon7->drv->name, avalon7->device_id, err);
 			}
 		}
-		/* TODO: Update this for more than one machines */
-		cgsleep_ms(150);
+		cgsleep_ms(fill_timeout);
 #endif
 	}
 
@@ -1812,7 +1814,7 @@ static void avalon7_set_freq(struct cgpu_info *avalon7, int addr, int miner_id, 
 	for (i = 1; i < AVA7_DEFAULT_PLL_CNT; i++)
 		f = f > freq[i] ? f : freq[i];
 
-	tmp = ((AVA7_ASIC_TIMEOUT_CONST / f) * 40 / 4) * (opt_avalon7_ssplus_enable ? 2 : 1);
+	tmp = ((AVA7_ASIC_TIMEOUT_CONST / f) * AVA7_DEFAULT_NTIME_OFFSET / 4) * (opt_avalon7_ssplus_enable ? 2 : 1);
 	tmp = be32toh(tmp);
 	memcpy(send_pkg.data + AVA7_DEFAULT_PLL_CNT * 4, &tmp, 4);
 
