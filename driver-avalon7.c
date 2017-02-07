@@ -670,8 +670,8 @@ static int decode_pkg(struct cgpu_info *avalon7, struct avalon7_ret *ar, int mod
 		info->error_crc[modular_id][ar->idx] += be32toh(tmp);
 
 		memcpy(&tmp, ar->data + 28, 4);
-		info->mm_got_pairs += be32toh(tmp) >> 16;
-		info->mm_got_invalid_pairs += be32toh(tmp) & 0xffff;
+		info->mm_got_pairs[modular_id] += be32toh(tmp) >> 16;
+		info->mm_got_invalid_pairs[modular_id] += be32toh(tmp) & 0xffff;
 		break;
 	case AVA7_P_STATUS_PMU:
 		/* TODO: decode ntc led from PMU */
@@ -1406,7 +1406,7 @@ static void *avalon7_ssp_fill_pairs(void *userdata)
 				applog(LOG_DEBUG, "send pair %08x-%08x", pair[0], pair[1]);
 				memcpy(send_pkg.data + pair_counts * 8 + 4, &tmp, 4);
 				pair_counts++;
-				info->gen_pairs++;
+				info->gen_pairs[i]++;
 			}
 
 			avalon7_init_pkg(&send_pkg, AVA7_P_PAIRS, 1, 1);
@@ -1584,6 +1584,9 @@ static void detect_modules(struct cgpu_info *avalon7)
 		info->power_good[i] = 0;
 		memset(info->pmu_version[i], 0, sizeof(char) * 5 * AVA7_DEFAULT_PMU_CNT);
 		info->diff1[i] = 0;
+		info->mm_got_pairs[i] = 0;
+		info->mm_got_invalid_pairs[i] = 0;
+		info->gen_pairs[i] = 0;
 
 		applog(LOG_NOTICE, "%s-%d: New module detected! ID[%d-%x]",
 		       avalon7->drv->name, avalon7->device_id, i, info->mm_dna[i][AVA7_MM_DNA_LEN - 1]);
@@ -2325,7 +2328,7 @@ static struct api_data *avalon7_api_stats(struct cgpu_info *avalon7)
 		statbuf[strlen(statbuf) - 1] = ']';
 
 		strcat(statbuf, " PAIRS[");
-		sprintf(buf, "%"PRIu64" %"PRIu64" %"PRIu64" ", info->mm_got_pairs, info->mm_got_invalid_pairs, info->gen_pairs);
+		sprintf(buf, "%"PRIu64" %"PRIu64" %"PRIu64" ", info->mm_got_pairs[i], info->mm_got_invalid_pairs[i], info->gen_pairs[i]);
 		strcat(statbuf, buf);
 		statbuf[strlen(statbuf) - 1] = ']';
 

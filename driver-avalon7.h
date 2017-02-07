@@ -266,9 +266,9 @@ struct avalon7_info {
 	uint16_t vout_adc_ratio[AVA7_DEFAULT_MODULARS];
 	bool conn_overloaded;
 
-	uint64_t mm_got_pairs;
-	uint64_t mm_got_invalid_pairs;
-	uint64_t gen_pairs;
+	uint64_t mm_got_pairs[AVA7_DEFAULT_MODULARS];
+	uint64_t mm_got_invalid_pairs[AVA7_DEFAULT_MODULARS];
+	uint64_t gen_pairs[AVA7_DEFAULT_MODULARS];
 
 	/* SSP */
 	pthread_t ssp_thr;
